@@ -30,6 +30,7 @@ export function BillTable({
   sortBy, setSortBy, sortOrder, setSortOrder, searchQuery, setSearchQuery,
   onAdd, onEdit, onDelete,
 }: BillTableProps) {
+  const navigate = useNavigate();
   const toggleSort = (field: 'dueDate' | 'amount') => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     else { setSortBy(field); setSortOrder('asc'); }
