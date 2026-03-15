@@ -24,6 +24,7 @@ const Index = () => {
         <div className="grid grid-cols-12 gap-4">
           <HeroWidget {...store.stats} />
           <UpcomingBillsWidget bills={store.upcomingBills} />
+          <SpendingChartWidget bills={store.allBills} />
           <AIInsightsWidget />
           <BillTable
             bills={store.bills}
