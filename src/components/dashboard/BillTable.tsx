@@ -116,7 +116,10 @@ export function BillTable({
                   className="group border-t border-border/20 hover:bg-secondary/30 transition-colors duration-150"
                 >
                   <td className="py-3 pl-4">
-                    <div>
+                    <div
+                      className="cursor-pointer hover:text-accent transition-colors"
+                      onClick={() => navigate(`/bill/${bill.id}`)}
+                    >
                       <p className="font-medium text-sm">{bill.name}</p>
                       {bill.isSubscription && <span className="text-xs text-muted-foreground">Recurring</span>}
                     </div>
