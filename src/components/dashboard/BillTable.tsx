@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
