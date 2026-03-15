@@ -48,7 +48,7 @@ export function SpendingChartWidget({ bills }: SpendingChartWidgetProps) {
               dataKey="category"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 11, textTransform: 'capitalize' }}
+              tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 11 }}
               tickFormatter={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
             />
             <YAxis

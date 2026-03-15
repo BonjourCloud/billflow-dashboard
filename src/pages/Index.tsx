@@ -6,6 +6,7 @@ import { UpcomingBillsWidget } from '@/components/dashboard/UpcomingBillsWidget'
 import { AIInsightsWidget } from '@/components/dashboard/AIInsightsWidget';
 import { BillTable } from '@/components/dashboard/BillTable';
 import { BillDialog } from '@/components/dashboard/BillDialog';
+import { SpendingChartWidget } from '@/components/dashboard/SpendingChartWidget';
 import { Bill } from '@/data/bills';
 
 const Index = () => {
