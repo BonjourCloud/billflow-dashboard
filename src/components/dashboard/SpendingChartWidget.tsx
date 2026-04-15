@@ -15,9 +15,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 interface SpendingChartWidgetProps {
   bills: Bill[];
+  onCategoryClick?: (category: string) => void;
 }
 
-export function SpendingChartWidget({ bills }: SpendingChartWidgetProps) {
+export function SpendingChartWidget({ bills, onCategoryClick }: SpendingChartWidgetProps) {
   const data = useMemo(() => {
     const byCategory: Record<string, number> = {};
     bills.forEach(b => {
@@ -71,7 +72,7 @@ export function SpendingChartWidget({ bills }: SpendingChartWidgetProps) {
               itemStyle={{ color: 'hsl(215, 20%, 55%)' }}
               formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
             />
-            <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={48}>
+            <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={48} className="cursor-pointer" onClick={(_: unknown, index: number) => onCategoryClick?.(data[index].category)}>
               {data.map((entry) => (
                 <Cell key={entry.category} fill={CATEGORY_COLORS[entry.category] || 'hsl(217, 91%, 60%)'} />
               ))}
