@@ -4,9 +4,11 @@ import { motion } from 'framer-motion';
 import { Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 export default function Login() {
   const { session, signInWithGoogle, loading } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,7 +17,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 relative overflow-hidden">
-      {/* Background effects */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-primary/6 rounded-full blur-[120px]" />
       </div>
@@ -23,21 +24,23 @@ export default function Login() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
+        transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
         className="relative glass-card rounded-2xl border border-border/60 p-8 md:p-12 w-full max-w-md text-center"
       >
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <Zap className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-xl tracking-tight">BillFlow</span>
+          {settings.logo_url ? (
+            <img src={settings.logo_url} alt={settings.brand_name} className="w-10 h-10 rounded-xl object-contain" />
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+              <Zap className="w-5 h-5 text-primary-foreground" />
+            </div>
+          )}
+          <span className="font-bold text-xl tracking-tight">{settings.brand_name}</span>
         </div>
 
         <h1 className="text-2xl font-bold tracking-tight mb-2">Welcome back</h1>
         <p className="text-muted-foreground text-sm mb-8">Sign in to access your dashboard</p>
 
-        {/* Google OAuth Button */}
         <Button
           onClick={signInWithGoogle}
           disabled={loading}

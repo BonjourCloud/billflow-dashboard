@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,16 @@ export function BillTable({
             {CATEGORIES.map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
           </SelectContent>
         </Select>
+        {(filterStatus !== 'all' || filterCategory !== 'all' || searchQuery) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setFilterStatus('all'); setFilterCategory('all'); setSearchQuery(''); }}
+            className="gap-1.5 text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
+          >
+            <X className="w-3.5 h-3.5" /> Clear filters
+          </Button>
+        )}
       </div>
 
       <div className="overflow-x-auto">

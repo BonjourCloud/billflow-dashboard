@@ -3,12 +3,15 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Zap, Shield, BarChart3, CreditCard, Bell, TrendingUp, CheckCircle2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { usePricingTiers } from '@/hooks/usePricingTiers';
+import { useUserRole } from '@/hooks/useUserRole';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   visible: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { delay: i * 0.1, duration: 0.5, ease: [0.25, 0.4, 0.25, 1] as const },
+    transition: { delay: i * 0.1, duration: 0.3, ease: [0.25, 0.4, 0.25, 1] as const },
   }),
 };
 
@@ -29,31 +32,39 @@ const stats = [
 ];
 
 const testimonials = [
-  { name: 'Sarah Chen', role: 'Product Manager', text: 'BillFlow completely transformed how I manage subscriptions. Saved me $340/month by catching duplicate charges.', avatar: 'SC' },
+  { name: 'Sarah Chen', role: 'Product Manager', text: 'Completely transformed how I manage subscriptions. Saved me $340/month by catching duplicate charges.', avatar: 'SC' },
   { name: 'Marcus Rivera', role: 'Freelancer', text: 'The AI insights are incredible. It predicted my spending pattern and helped me budget three months ahead.', avatar: 'MR' },
   { name: 'Emily Nakamura', role: 'Startup Founder', text: 'Best financial tool I\'ve used. The interface is gorgeous and the analytics are genuinely useful.', avatar: 'EN' },
 ];
 
-const pricingPlans = [
-  { name: 'Free', price: '$0', period: '/forever', features: ['Up to 10 bills', 'Basic analytics', 'Email reminders', 'Mobile app'], cta: 'Get Started', highlighted: false },
-  { name: 'Pro', price: '$9', period: '/month', features: ['Unlimited bills', 'AI insights', 'Smart alerts', 'Export reports', 'Priority support'], cta: 'Start Free Trial', highlighted: true },
-  { name: 'Enterprise', price: '$29', period: '/month', features: ['Everything in Pro', 'Team sharing', 'API access', 'Custom integrations', 'Dedicated support'], cta: 'Contact Sales', highlighted: false },
-];
+function formatPrice(monthly: number, period: string) {
+  if (period === 'forever') return { price: '$0', suffix: '/forever' };
+  if (period === 'year') return { price: `$${monthly}`, suffix: '/year' };
+  return { price: `$${monthly}`, suffix: '/month' };
+}
 
 export default function Landing() {
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { isAdmin } = useUserRole();
+  const { settings } = useSiteSettings();
+  const { tiers } = usePricingTiers();
+
+  const Logo = () => settings.logo_url ? (
+    <img src={settings.logo_url} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
+  ) : (
+    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+      <Zap className="w-4 h-4 text-primary-foreground" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      {/* Nav */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl flex items-center justify-between px-6 h-16">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Zap className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-lg tracking-tight">BillFlow</span>
+            <Logo />
+            <span className="font-bold text-lg tracking-tight">{settings.brand_name}</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
@@ -61,6 +72,7 @@ export default function Landing() {
             <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
           </div>
           <div className="flex items-center gap-3">
+            {isAdmin && <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>Admin</Button>}
             {session ? (
               <Button onClick={() => navigate('/dashboard')} size="sm">Dashboard</Button>
             ) : (
@@ -75,7 +87,6 @@ export default function Landing() {
         </div>
       </nav>
 
-      {/* Hero */}
       <section className="relative pt-32 pb-20 md:pt-44 md:pb-32 px-6">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/8 rounded-full blur-[120px]" />
@@ -88,17 +99,16 @@ export default function Landing() {
           </motion.div>
           <motion.h1 variants={fadeUp} initial="hidden" animate="visible" custom={1}
             className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
-            Take Control of Your{' '}
-            <span className="text-primary">Financial Life</span>
+            {settings.hero_headline}
           </motion.h1>
           <motion.p variants={fadeUp} initial="hidden" animate="visible" custom={2}
             className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Track bills, manage subscriptions, and unlock AI-driven spending insights — all in one beautiful, intuitive dashboard.
+            {settings.hero_subheadline}
           </motion.p>
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={3}
             className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button size="lg" className="text-base px-8 h-12" onClick={() => navigate('/login')}>
-              Start Free — No Card Needed <ArrowRight className="w-4 h-4" />
+              {settings.hero_cta_label} <ArrowRight className="w-4 h-4" />
             </Button>
             <Button variant="outline" size="lg" className="text-base px-8 h-12" onClick={() => navigate('/dashboard')}>
               View Demo
@@ -107,7 +117,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats */}
       <section className="py-12 border-y border-border/40 bg-card/30 backdrop-blur-sm">
         <div className="mx-auto max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-8 px-6">
           {stats.map((s, i) => (
@@ -120,7 +129,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features */}
       <section id="features" className="py-24 md:py-32 px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
@@ -143,7 +151,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Testimonials */}
       <section id="testimonials" className="py-24 bg-card/30 border-y border-border/40 px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
@@ -172,7 +179,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Pricing */}
       <section id="pricing" className="py-24 md:py-32 px-6">
         <div className="mx-auto max-w-5xl">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
@@ -181,31 +187,33 @@ export default function Landing() {
             <p className="text-muted-foreground text-lg">Start free. Upgrade when you need more.</p>
           </motion.div>
           <div className="grid md:grid-cols-3 gap-6">
-            {pricingPlans.map((p, i) => (
-              <motion.div key={p.name} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
-                className={`rounded-xl p-6 border ${p.highlighted ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border glass-card'}`}>
-                <h3 className="font-semibold text-lg mb-1">{p.name}</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-extrabold">{p.price}</span>
-                  <span className="text-muted-foreground text-sm">{p.period}</span>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  {p.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <Button className="w-full" variant={p.highlighted ? 'default' : 'outline'} onClick={() => navigate('/login')}>
-                  {p.cta}
-                </Button>
-              </motion.div>
-            ))}
+            {tiers.map((t, i) => {
+              const { price, suffix } = formatPrice(t.price_monthly, t.billing_period);
+              return (
+                <motion.div key={t.id} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
+                  className={`rounded-xl p-6 border ${t.is_highlighted ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border glass-card'}`}>
+                  <h3 className="font-semibold text-lg mb-1">{t.name}</h3>
+                  <div className="flex items-baseline gap-1 mb-6">
+                    <span className="text-4xl font-extrabold">{price}</span>
+                    <span className="text-muted-foreground text-sm">{suffix}</span>
+                  </div>
+                  <ul className="space-y-3 mb-8">
+                    {t.features.map(f => (
+                      <li key={f} className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button className="w-full" variant={t.is_highlighted ? 'default' : 'outline'} onClick={() => navigate('/login')}>
+                    {t.cta_label}
+                  </Button>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-24 px-6">
         <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
           className="mx-auto max-w-3xl text-center glass-card rounded-2xl p-12 md:p-16 border border-primary/20">
@@ -217,16 +225,13 @@ export default function Landing() {
         </motion.div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-border/40 py-12 px-6">
         <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
-              <Zap className="w-3 h-3 text-primary-foreground" />
-            </div>
-            <span className="font-semibold text-sm">BillFlow</span>
+            <Logo />
+            <span className="font-semibold text-sm">{settings.brand_name}</span>
           </div>
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} BillFlow. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} {settings.brand_name}. All rights reserved.</p>
         </div>
       </footer>
     </div>
