@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, DollarSign, Palette, ImageIcon, ArrowLeft, LogOut } from 'lucide-react';
+import { LayoutDashboard, DollarSign, Palette, ImageIcon, ArrowLeft, LogOut, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 const items = [
   { to: '/admin', end: true, icon: LayoutDashboard, label: 'Overview' },
+  { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/pricing', icon: DollarSign, label: 'Pricing' },
   { to: '/admin/branding', icon: ImageIcon, label: 'Branding' },
   { to: '/admin/theme', icon: Palette, label: 'Theme' },

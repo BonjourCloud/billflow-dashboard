@@ -17,6 +17,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminPricing from "./pages/admin/AdminPricing";
 import AdminBranding from "./pages/admin/AdminBranding";
 import AdminTheme from "./pages/admin/AdminTheme";
+import AdminUsers from "./pages/admin/AdminUsers";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/bill/:id" element={<ProtectedRoute><BillDetail /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                 <Route index element={<AdminDashboard />} />
+                <Route path="users" element={<AdminUsers />} />
                 <Route path="pricing" element={<AdminPricing />} />
                 <Route path="branding" element={<AdminBranding />} />
                 <Route path="theme" element={<AdminTheme />} />
