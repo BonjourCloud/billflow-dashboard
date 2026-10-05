@@ -1,73 +1,48 @@
-# Welcome to your Lovable project
+# BillFlow — Bill Payment & Subscription Management Dashboard
 
-## Project info
+A premium, dark-mode-first dashboard for tracking bills and subscriptions. Built with React, Vite, Tailwind CSS, shadcn/ui, Framer Motion, and Recharts.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+> **Current state: pure frontend.** All data is hardcoded mock state held in browser memory — no backend, no database, no auth. See [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) for what is mocked vs. planned.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+- **Bento-grid dashboard** with glassmorphism cards (onyx/slate dark theme, emerald = paid, rose = overdue)
+- **Hero widget** — total spend, paid/pending/overdue breakdown, animated progress bar
+- **Upcoming Bills widget** — next 3 pending bills, urgency-coded
+- **Spending by Category chart** (Recharts) — interactive: click a bar to filter the bill table; click again (or "Clear filter") to reset
+- **AI Insights widget** — placeholder that flags duplicate subscriptions
+- **Bill Hub table** — search, filter by status/category (with reset), sort by due date or amount, add/edit/delete via dialog
+- **Bill Detail page** (`/bill/:id`) — payment history, timestamped notes, summary stats
+- **Add/Edit dialog** — validated form with date picker and subscription toggle
+- All animations capped at 0.3s for a snappy feel
 
-**Use Lovable**
+## Tech Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+| Layer | Choice |
+|---|---|
+| Framework | React 18 + TypeScript 5, Vite 5 |
+| Styling | Tailwind CSS v3, shadcn/ui, semantic design tokens (`src/index.css`) |
+| Animation | Framer Motion (≤ 0.3s durations) |
+| Charts | Recharts |
+| State | Local React state (`useBillStore` hook) — no backend |
+| Routing | React Router (SPA) |
+| Tests | Vitest + jsdom, Playwright |
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Quick Start
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm i          # or: bun install
+npm run dev    # http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+## Documentation
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical architecture, data flow, file map
+- [docs/DESIGN.md](docs/DESIGN.md) — design system: tokens, colors, layout, motion rules
+- [docs/TESTING.md](docs/TESTING.md) — how to run and write tests locally
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — production via GitHub + Vercel, Turso (SQLite cloud), or AWS
+- [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) — what's mocked, what's real, what's pending (auth, admin panel, persistence)
 
-**Use GitHub Codespaces**
+## Deploy
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Click **Publish** in Lovable, or see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for GitHub/Vercel/AWS self-hosting.
