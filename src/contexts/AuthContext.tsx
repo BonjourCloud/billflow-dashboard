@@ -1,4 +1,5 @@
-
+import { configureApiAuth } from '@/lib/api';
+import { useEffect } from 'react';
 import {
   createContext,
   useContext,
@@ -38,6 +39,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useClerkAuth();
   const { user: clerkUser } = useUser();
   const clerk = useClerk();
+  useEffect(() => {
+    configureApiAuth(() => getToken());
+  }, [getToken]);
   const [signInLoading, setSignInLoading] = useState(false);
 
   const user = clerkUser
