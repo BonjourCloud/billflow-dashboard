@@ -1,6 +1,11 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+
+import {
+  createContext,
+  useContext,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useAuth as useClerkAuth, useClerk, useUser } from '@clerk/react';
 
 export interface Profile {
   id: string;
@@ -11,8 +16,16 @@ export interface Profile {
 }
 
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  getToken: () => Promise<string | null>;
+  session: { access_token: string | null } | null;
+  user: {
+    id: string;
+    email: string | null;
+    user_metadata: {
+      full_name: string | null;
+      avatar_url: string | null;
+    };
+  } | null;
   profile: Profile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -22,60 +35,64 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { isLoaded, isSignedIn, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
+  const clerk = useClerk();
+  const [signInLoading, setSignInLoading] = useState(false);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    setProfile(data);
-  };
-
-  useEffect(() => {
-    // Set up auth listener BEFORE checking current session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        if (session?.user) {
-          // Use setTimeout to avoid Supabase deadlock on token refresh
-          setTimeout(() => fetchProfile(session.user.id), 0);
-        } else {
-          setProfile(null);
-        }
-        setLoading(false);
+  const user = clerkUser
+    ? {
+        id: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? null,
+        user_metadata: {
+          full_name: clerkUser.fullName ?? null,
+          avatar_url: clerkUser.imageUrl ?? null,
+        },
       }
-    );
+    : null;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        fetchProfile(session.user.id);
+  const profile: Profile | null = clerkUser
+    ? {
+        id: clerkUser.id,
+        display_name: clerkUser.fullName ?? null,
+        avatar_url: clerkUser.imageUrl ?? null,
+        created_at: clerkUser.createdAt?.toISOString() ?? '',
+        updated_at: clerkUser.updatedAt?.toISOString() ?? '',
       }
-      setLoading(false);
-    });
+    : null;
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const session = isSignedIn
+    ? { access_token: null as string | null }
+    : null;
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin + '/dashboard' },
-    });
+    setSignInLoading(true);
+    try {
+      await clerk.openSignIn({
+        signUpForceRedirectUrl: '/dashboard',
+        forceRedirectUrl: '/dashboard',
+      });
+    } finally {
+      setSignInLoading(false);
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
+    await clerk.signOut({ redirectUrl: '/' });
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, profile, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider
+      value={{
+        getToken,
+        session,
+        user,
+        profile,
+        loading: !isLoaded || signInLoading,
+        signInWithGoogle,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -83,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+
   return ctx;
 }
