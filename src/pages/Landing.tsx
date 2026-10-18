@@ -51,7 +51,7 @@ export default function Landing() {
   const { tiers } = usePricingTiers();
 
   const Logo = () => settings.logo_url ? (
-    <img src={settings.logo_url} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
+    <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
   ) : (
     <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
       <Zap className="w-4 h-4 text-primary-foreground" />

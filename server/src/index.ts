@@ -5,10 +5,11 @@ import cors from "cors";
 import helmet from "helmet";
 import { connectDB } from "./config/db.js";
 import { User } from "./models/User.js";
-import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { s3Client, s3Bucket } from "./config/s3.js";
 import multer from "multer";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const app = express();
 
 const upload = multer({
@@ -87,6 +88,7 @@ app.get("/api/users/me", async (req, res) => {
       { new: true, upsert: true, runValidators: true },
     ).lean();
 
+
     return res.status(200).json(user);
   } catch (error) {
     console.error("Failed to load current user:", error);
@@ -156,10 +158,38 @@ app.get("/api/site-settings", async (_req, res) => {
       });
     }
 
+    // Keep logo_url as the permanent stored URL. Generate a temporary URL
+    // separately because the S3 bucket is private.
+    let logoDisplayUrl: string | null = settings.logo_url ?? null;
+
+    if (settings.logo_url) {
+      try {
+        const parsedUrl = new URL(settings.logo_url);
+        const region = process.env.AWS_REGION || "us-east-1";
+        const expectedHost = `${s3Bucket}.s3.${region}.amazonaws.com`;
+
+        if (
+          parsedUrl.hostname === expectedHost &&
+          parsedUrl.pathname.startsWith("/branding/")
+        ) {
+          const key = decodeURIComponent(parsedUrl.pathname.slice(1));
+          logoDisplayUrl = await getSignedUrl(
+            s3Client,
+            new GetObjectCommand({ Bucket: s3Bucket, Key: key }),
+            { expiresIn: 3600 },
+          );
+        }
+      } catch (error) {
+        console.error("Failed to create logo display URL:", error);
+        logoDisplayUrl = null;
+      }
+    }
+
     return res.status(200).json({
       id: settings.settingsId,
       brand_name: settings.brand_name,
       logo_url: settings.logo_url,
+      logo_display_url: logoDisplayUrl,
       hero_headline: settings.hero_headline,
       hero_subheadline: settings.hero_subheadline,
       hero_cta_label: settings.hero_cta_label,
@@ -229,6 +259,7 @@ app.patch("/api/admin/branding", async (req, res) => {
         error: "Failed to save branding settings.",
       });
     }
+
 
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -305,6 +336,8 @@ app.patch("/api/admin/site-settings", async (req, res) => {
       return res.status(500).json({ error: "Failed to save theme settings." });
     }
 
+
+
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("Failed to save theme settings:", error);
@@ -350,12 +383,15 @@ app.post("/api/admin/branding/logo", (req, res, next) => {
         Key: key,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
-        CacheControl: "public, max-age=3600",
+        CacheControl: "private, max-age=3600",
       }),
     );
 
+    const region = process.env.AWS_REGION || "us-east-1";
+    const url = `https://${s3Bucket}.s3.${region}.amazonaws.com/${key}`;
+
     return res.status(201).json({
-      key,
+      url,
       message: "Logo uploaded successfully.",
     });
   } catch (error) {

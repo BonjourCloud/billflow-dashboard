@@ -22,7 +22,7 @@ export function DashboardHeader() {
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
           {settings.logo_url ? (
-            <img src={settings.logo_url} alt={settings.brand_name} className="w-5 h-5 object-contain" />
+            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-5 h-5 object-contain" />
           ) : (
             <Receipt className="w-5 h-5 text-primary" />
           )}

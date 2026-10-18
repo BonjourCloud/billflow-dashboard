@@ -29,7 +29,7 @@ export default function Login() {
       >
         <div className="flex items-center justify-center gap-2 mb-8">
           {settings.logo_url ? (
-            <img src={settings.logo_url} alt={settings.brand_name} className="w-10 h-10 rounded-xl object-contain" />
+            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-10 h-10 rounded-xl object-contain" />
           ) : (
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
               <Zap className="w-5 h-5 text-primary-foreground" />
