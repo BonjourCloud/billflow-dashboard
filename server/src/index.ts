@@ -5,7 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { connectDB } from "./config/db.js";
 import { User } from "./models/User.js";
-import { Bill, isValidBillId } from "./models/Bill.js";
+import { Bill, isValidBillId, type BillDocument } from "./models/Bill.js";
 import {
   generateDueOccurrencesForUser,
   createRecurringSeriesWithOccurrences,
@@ -619,7 +619,7 @@ app.patch("/api/bills/:id", async (req, res) => {
     const bill = await updateRecurringBillWithScope(
       userId,
       req.params.id,
-      updates as Partial<BillDocument>,
+      updates as Partial<BillDocument> & { recurringDay?: number },
       updateScope,
     );
 

@@ -293,7 +293,7 @@ export async function createRecurringSeriesWithOccurrences(
 export async function updateRecurringBillWithScope(
   userId: string,
   billId: string,
-  updates: Partial<BillDocument>,
+  updates: Partial<BillDocument> & { recurringDay?: number },
   updateScope: "this" | "future" = "this",
 ): Promise<BillDocument | null> {
   const bill = await Bill.findOne({ _id: billId, userId });
@@ -319,11 +319,32 @@ export async function updateRecurringBillWithScope(
     { new: true, runValidators: true },
   ).lean();
 
-  // 2. Update the parent RecurringSeries template
+  // 2. Resolve recurringDay if dueDate or recurringDay was updated
+  let resolvedRecurringDay: number | undefined = undefined;
+  if (
+    typeof updates.recurringDay === "number" &&
+    updates.recurringDay >= 1 &&
+    updates.recurringDay <= 31
+  ) {
+    resolvedRecurringDay = updates.recurringDay;
+  } else if (updates.dueDate) {
+    const parsedDate =
+      updates.dueDate instanceof Date
+        ? updates.dueDate
+        : new Date(updates.dueDate);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      resolvedRecurringDay = parsedDate.getUTCDate();
+    }
+  }
+
+  // 3. Update the parent RecurringSeries template
   const seriesUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) seriesUpdates.name = updates.name;
   if (updates.amount !== undefined) seriesUpdates.amount = updates.amount;
   if (updates.category !== undefined) seriesUpdates.category = updates.category;
+  if (resolvedRecurringDay !== undefined) {
+    seriesUpdates.recurringDay = resolvedRecurringDay;
+  }
 
   if (Object.keys(seriesUpdates).length > 0) {
     await RecurringSeries.findOneAndUpdate(
@@ -333,13 +354,34 @@ export async function updateRecurringBillWithScope(
     );
   }
 
-  // 3. Update existing future pending occurrences of this series
+  // 4. Update existing future pending occurrences of this series (never touch paid records!)
   const futurePendingUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) futurePendingUpdates.name = updates.name;
   if (updates.amount !== undefined) futurePendingUpdates.amount = updates.amount;
   if (updates.category !== undefined) futurePendingUpdates.category = updates.category;
 
-  if (Object.keys(futurePendingUpdates).length > 0) {
+  if (resolvedRecurringDay !== undefined) {
+    const futurePendingBills = await Bill.find({
+      userId,
+      seriesId: bill.seriesId,
+      dueDate: { $gt: bill.dueDate },
+      status: "pending",
+    });
+
+    for (const futureBill of futurePendingBills) {
+      const year = futureBill.dueDate.getUTCFullYear();
+      const monthIndex = futureBill.dueDate.getUTCMonth();
+      const newDueDate = calculateOccurrenceDueDate(
+        resolvedRecurringDay,
+        year,
+        monthIndex,
+      );
+      await Bill.updateOne(
+        { _id: futureBill._id, userId },
+        { $set: { ...futurePendingUpdates, dueDate: newDueDate } },
+      );
+    }
+  } else if (Object.keys(futurePendingUpdates).length > 0) {
     await Bill.updateMany(
       {
         userId,
@@ -357,8 +399,8 @@ export async function updateRecurringBillWithScope(
 /**
  * Deletes a recurring bill occurrence with scope:
  * - "this": Deletes this occurrence and marks the cycle as skipped in the series.
- * - "future": Deletes this occurrence and all future occurrences of this series,
- *   and deactivates the series (preserves historical paid records).
+ * - "future": Stops the recurring series from this point forward.
+ *   Never deletes any occurrence with status "paid".
  * - "all": Deletes the entire series and all its occurrences.
  */
 export async function deleteRecurringBillWithScope(
@@ -385,18 +427,55 @@ export async function deleteRecurringBillWithScope(
   }
 
   if (deleteScope === "future") {
-    // Delete this and all future occurrences (especially pending ones)
-    // Avoid deleting past paid occurrences to protect accounting history
+    // Case A: The selected occurrence is paid
+    if (bill.status === "paid") {
+      // 1. Preserve this paid bill and all other paid bills.
+      // 2. Delete only unpaid future occurrences strictly after this bill.
+      await Bill.deleteMany({
+        userId,
+        seriesId: bill.seriesId,
+        dueDate: { $gt: bill.dueDate },
+        status: { $ne: "paid" },
+      });
+      // 3. End the series at this paid bill's due date
+      await RecurringSeries.findOneAndUpdate(
+        { _id: bill.seriesId, userId },
+        { $set: { isActive: false, endDate: bill.dueDate } },
+      );
+      return true;
+    }
+
+    // Case B: The selected occurrence is unpaid (pending or overdue)
+    // 1. Delete this unpaid bill and all future unpaid occurrences
     await Bill.deleteMany({
       userId,
       seriesId: bill.seriesId,
       dueDate: { $gte: bill.dueDate },
+      status: { $ne: "paid" }, // Invariant: never delete any paid bill!
     });
-    // End the recurring series
-    await RecurringSeries.findOneAndUpdate(
-      { _id: bill.seriesId, userId },
-      { $set: { isActive: false, endDate: bill.dueDate } },
-    );
+
+    // 2. Mark this deleted cycle as skipped and set endDate before this occurrence
+    // to prevent regeneration if the series is reactivated
+    const previousDayUtc = new Date(bill.dueDate.getTime() - 86400000);
+    const seriesUpdate: Record<string, unknown> = {
+      isActive: false,
+      endDate: previousDayUtc,
+    };
+
+    if (bill.billingCycle) {
+      await RecurringSeries.findOneAndUpdate(
+        { _id: bill.seriesId, userId },
+        {
+          $set: seriesUpdate,
+          $addToSet: { skippedCycles: bill.billingCycle },
+        },
+      );
+    } else {
+      await RecurringSeries.findOneAndUpdate(
+        { _id: bill.seriesId, userId },
+        { $set: seriesUpdate },
+      );
+    }
     return true;
   }
 

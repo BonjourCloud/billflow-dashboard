@@ -363,55 +363,156 @@ describe("Recurrence Independent Payment & Deletion Semantics Simulation", () =>
     expect(series.skippedCycles).toContain("2026-11");
   });
 
-  it("deleting with scope 'future' deactivates series and preserves past paid records", () => {
-    const series: MockSeries = {
-      _id: "series_abc",
+  it("stopping a series from a paid occurrence preserves that paid occurrence and deletes only future unpaid bills", () => {
+    // Current bill is October 15, which is already PAID
+    const currentBill: MockBill = {
+      _id: "bill_oct",
       userId: "user_123",
-      name: "Streaming Service",
-      amount: 20,
-      isActive: true,
-      skippedCycles: [],
+      seriesId: "series_abc",
+      billingCycle: "2026-10",
+      dueDate: new Date(Date.UTC(2026, 9, 15)),
+      status: "paid",
+      amount: 45,
     };
 
     let bills: MockBill[] = [
-      {
-        _id: "bill_oct",
-        userId: "user_123",
-        seriesId: "series_abc",
-        billingCycle: "2026-10",
-        dueDate: new Date("2026-10-15"),
-        status: "paid",
-        amount: 20,
-      },
+      currentBill,
       {
         _id: "bill_nov",
         userId: "user_123",
         seriesId: "series_abc",
         billingCycle: "2026-11",
-        dueDate: new Date("2026-11-15"),
+        dueDate: new Date(Date.UTC(2026, 10, 15)),
         status: "pending",
-        amount: 20,
+        amount: 45,
       },
       {
         _id: "bill_dec",
         userId: "user_123",
         seriesId: "series_abc",
         billingCycle: "2026-12",
-        dueDate: new Date("2026-12-15"),
+        dueDate: new Date(Date.UTC(2026, 11, 15)),
         status: "pending",
-        amount: 20,
+        amount: 45,
       },
     ];
 
-    // User cancels from November onwards
-    const cutoffDate = new Date("2026-11-15");
-    bills = bills.filter((b) => b.dueDate < cutoffDate);
+    const series: MockSeries = {
+      _id: "series_abc",
+      userId: "user_123",
+      name: "Club Membership",
+      amount: 45,
+      isActive: true,
+      skippedCycles: [],
+    };
+
+    // Simulate deleteRecurringBillWithScope future deletion logic:
+    // If bill.status === 'paid', only delete dueDate > bill.dueDate where status !== 'paid'
+    const dueDateFilter = currentBill.status === "paid"
+      ? (d: Date) => d.getTime() > currentBill.dueDate.getTime()
+      : (d: Date) => d.getTime() >= currentBill.dueDate.getTime();
+
+    bills = bills.filter(
+      (b) => !(dueDateFilter(b.dueDate) && b.status !== "paid"),
+    );
+
     series.isActive = false;
 
-    // October paid record must remain intact
-    expect(bills.length).toBe(1);
-    expect(bills[0].billingCycle).toBe("2026-10");
-    expect(bills[0].status).toBe("paid");
+    // The paid occurrence MUST be preserved!
+    expect(bills.find((b) => b._id === "bill_oct")).toBeDefined();
+    expect(bills.find((b) => b._id === "bill_oct")?.status).toBe("paid");
+
+    // The future unpaid occurrences are deleted
+    expect(bills.find((b) => b._id === "bill_nov")).toBeUndefined();
+    expect(bills.find((b) => b._id === "bill_dec")).toBeUndefined();
     expect(series.isActive).toBe(false);
+  });
+
+  it("stopping a series never deletes any other paid occurrence even if in the future", () => {
+    let bills: MockBill[] = [
+      {
+        _id: "bill_oct",
+        userId: "user_123",
+        seriesId: "series_abc",
+        billingCycle: "2026-10",
+        dueDate: new Date(Date.UTC(2026, 9, 15)),
+        status: "paid",
+        amount: 100,
+      },
+      {
+        _id: "bill_nov",
+        userId: "user_123",
+        seriesId: "series_abc",
+        billingCycle: "2026-11",
+        dueDate: new Date(Date.UTC(2026, 10, 15)),
+        status: "pending", // User is on this pending bill when clicking "Stop future"
+        amount: 100,
+      },
+      {
+        _id: "bill_dec_prepaid",
+        userId: "user_123",
+        seriesId: "series_abc",
+        billingCycle: "2026-12",
+        dueDate: new Date(Date.UTC(2026, 11, 15)),
+        status: "paid", // User had prepaid December
+        amount: 100,
+      },
+    ];
+
+    const currentBill = bills[1]; // November pending
+
+    // Simulation of deleteMany: status !== "paid"
+    bills = bills.filter(
+      (b) =>
+        !(
+          b.dueDate.getTime() >= currentBill.dueDate.getTime() &&
+          b.status !== "paid"
+        ),
+    );
+
+    // November (pending) was deleted
+    expect(bills.find((b) => b._id === "bill_nov")).toBeUndefined();
+
+    // Both October (past paid) and December (future paid) MUST be preserved!
+    expect(bills.find((b) => b._id === "bill_oct")?.status).toBe("paid");
+    expect(bills.find((b) => b._id === "bill_dec_prepaid")?.status).toBe("paid");
+  });
+
+  it("stopping from an unpaid occurrence records skipped cycle and prevents regeneration", () => {
+    const startDate = new Date(Date.UTC(2026, 8, 15)); // Sept 15
+    const refDate = new Date(Date.UTC(2026, 9, 19)); // Oct 19
+
+    // Suppose series is stopped at October 15 (unpaid)
+    // endDate set to day before Oct 15: Oct 14
+    const endDate = new Date(Date.UTC(2026, 9, 14));
+    const skippedCycles = ["2026-10"];
+
+    const cycles = getDueCycles(startDate, 15, endDate, refDate);
+    const generatedCycleKeys = cycles
+      .map((c) => c.billingCycle)
+      .filter((cycleKey) => !skippedCycles.includes(cycleKey));
+
+    // September should exist, October should NOT be regenerated!
+    expect(generatedCycleKeys).toEqual(["2026-09"]);
+    expect(generatedCycleKeys).not.toContain("2026-10");
+  });
+
+  it("changing recurring due date updates the anchor day for subsequent cycles with clamping", () => {
+    // Original series was on day 15
+    let currentAnchor = 15;
+    const initialNovDate = calculateOccurrenceDueDate(currentAnchor, 2026, 10);
+    expect(initialNovDate.getUTCDate()).toBe(15);
+
+    // User updates due date with updateScope: 'future' to day 31
+    const newDueDateString = "2026-11-30"; // User selected Nov 30 (day 30/31)
+    const parsedDate = new Date(newDueDateString);
+    currentAnchor = parsedDate.getUTCDate(); // 30
+
+    // Next cycles follow the updated anchor day with month-end clamping
+    const decDate = calculateOccurrenceDueDate(currentAnchor, 2026, 11); // December
+    expect(decDate.getUTCDate()).toBe(30);
+
+    const febDate = calculateOccurrenceDueDate(currentAnchor, 2027, 1); // Feb 2027
+    expect(febDate.getUTCDate()).toBe(28); // Clamped to Feb 28!
   });
 });

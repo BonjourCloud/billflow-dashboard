@@ -57,6 +57,22 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
   const recurringDay = dueDate ? parseInt(dueDate.split('-')[2], 10) : null;
   const isEditingRecurring = Boolean(bill && (bill.seriesId || bill.recurrenceType === 'recurring'));
 
+  const initialDueDateStr = bill?.dueDate
+    ? new Date(bill.dueDate).toISOString().split('T')[0]
+    : '';
+
+  const hasMetadataChanges = Boolean(
+    bill &&
+      (name !== bill.name ||
+        Number(amount) !== bill.amount ||
+        dueDate !== initialDueDateStr ||
+        category !== bill.category),
+  );
+
+  const isOnlyStatusChanged = Boolean(
+    bill && status !== bill.status && !hasMetadataChanges,
+  );
+
   const validate = () => {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = 'Name is required';
@@ -83,9 +99,10 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
     };
 
     if (bill) {
+      const effectiveScope = isOnlyStatusChanged ? 'this' : updateScope;
       onUpdate(bill._id, {
         ...data,
-        ...(isEditingRecurring ? { updateScope } : {}),
+        ...(isEditingRecurring ? { updateScope: effectiveScope } : {}),
       });
     } else {
       onSave(data);
@@ -229,27 +246,37 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
 
           {/* Edit Scope for Recurring Bills */}
           {isEditingRecurring && (
-            <div className="rounded-2xl p-3.5 bg-secondary/40 border border-border/40 space-y-2">
-              <Label className="text-xs font-semibold text-foreground">Apply changes to:</Label>
-              <RadioGroup
-                value={updateScope}
-                onValueChange={v => setUpdateScope(v as 'this' | 'future')}
-                className="space-y-1.5"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="this" id="scope-this" />
-                  <Label htmlFor="scope-this" className="text-xs cursor-pointer font-normal">
-                    This bill occurrence only
-                  </Label>
+            isOnlyStatusChanged ? (
+              <div className="rounded-2xl p-3 bg-secondary/40 border border-border/40 flex items-center gap-2 text-xs text-muted-foreground">
+                <Info className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span>Payment status applies to this monthly occurrence only. Future months remain independent.</span>
+              </div>
+            ) : (
+              <div className="rounded-2xl p-3.5 bg-secondary/40 border border-border/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-foreground">Apply changes to:</Label>
+                  <span className="text-[11px] text-muted-foreground">Payment status is always per occurrence</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="future" id="scope-future" />
-                  <Label htmlFor="scope-future" className="text-xs cursor-pointer font-normal">
-                    This and all upcoming recurring bills (preserves past records)
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
+                <RadioGroup
+                  value={updateScope}
+                  onValueChange={v => setUpdateScope(v as 'this' | 'future')}
+                  className="space-y-1.5"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="this" id="scope-this" />
+                    <Label htmlFor="scope-this" className="text-xs cursor-pointer font-normal">
+                      This bill occurrence only
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="future" id="scope-future" />
+                    <Label htmlFor="scope-future" className="text-xs cursor-pointer font-normal">
+                      This and all upcoming recurring bills (preserves past records)
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )
           )}
 
           <div className="flex justify-end gap-3 pt-2">
