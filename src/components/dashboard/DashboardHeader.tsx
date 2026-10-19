@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Moon, Sun, Receipt, Shield, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +14,7 @@ export function DashboardHeader() {
     return !document.documentElement.classList.contains('light');
   });
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut, user } = useAuth();
   const { isAdmin } = useUserRole();
   const { settings } = useSiteSettings();
@@ -34,8 +35,13 @@ export function DashboardHeader() {
     }
   }, [isDark, settings]);
 
+  const isBillsActive =
+    location.pathname === '/dashboard' ||
+    location.pathname.startsWith('/bill/');
+  const isSubsActive = location.pathname === '/subscriptions';
+
   return (
-    <header className="flex items-center justify-between mb-8">
+    <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
           {settings.logo_url ? (
@@ -48,6 +54,32 @@ export function DashboardHeader() {
           <h1 className="text-xl font-bold tracking-tight">{settings.brand_name}</h1>
           <p className="text-xs text-muted-foreground">Subscriptions & Bill Management</p>
         </div>
+      </div>
+
+      {/* Main Navigation Tabs */}
+      <div className="flex items-center gap-1 bg-secondary/50 p-1 rounded-2xl border border-border/40">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            isBillsActive
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Bills
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/subscriptions')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            isSubsActive
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Subscriptions
+        </button>
       </div>
       <div className="flex items-center gap-1">
         {isAdmin && (
