@@ -19,7 +19,7 @@ const Index = () => {
   const handleAdd = () => { setEditingBill(null); setDialogOpen(true); };
   const handleEdit = (bill: Bill) => { setEditingBill(bill); setDialogOpen(true); };
 
-  if (store.isLoading) {
+  if (store.isLoading && store.allBills.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 md:p-8">
         <div className="mx-auto max-w-7xl">

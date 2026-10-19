@@ -73,8 +73,11 @@ export default function AdminTheme() {
     document.documentElement.style.setProperty('--primary', primary);
     document.documentElement.style.setProperty('--ring', primary);
   }, [primary]);
-  useEffect(() => { document.documentElement.style.setProperty('--accent', accent); }, [accent]);
-  useEffect(() => { document.documentElement.style.setProperty('--background', background); }, [background]);
+  useEffect(() => {
+    if (!document.documentElement.classList.contains('light')) {
+      document.documentElement.style.setProperty('--background', background);
+    }
+  }, [background]);
 
   const applyPreset = (p: typeof PRESETS[0]) => {
     setPrimary(p.primary); setAccent(p.accent); setBackground(p.background);

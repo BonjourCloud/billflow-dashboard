@@ -45,7 +45,16 @@ function applyToDocument(s: SiteSettings) {
   root.style.setProperty('--primary', s.theme_primary_hsl);
   root.style.setProperty('--ring', s.theme_primary_hsl);
   root.style.setProperty('--accent', s.theme_accent_hsl);
-  root.style.setProperty('--background', s.theme_background_hsl);
+
+  const isLight =
+    root.classList.contains('light') ||
+    localStorage.getItem('billflow_theme') === 'light';
+
+  if (!isLight) {
+    root.style.setProperty('--background', s.theme_background_hsl);
+  } else {
+    root.style.removeProperty('--background');
+  }
 
   const pair = getFontPair(s.theme_font_pair);
   root.style.setProperty('--font-heading', `'${pair.heading}', system-ui, sans-serif`);

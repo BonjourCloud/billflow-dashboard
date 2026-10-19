@@ -7,15 +7,32 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 export function DashboardHeader() {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('billflow_theme');
+    if (saved === 'light') return false;
+    if (saved === 'dark') return true;
+    return !document.documentElement.classList.contains('light');
+  });
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
   const { isAdmin } = useUserRole();
   const { settings } = useSiteSettings();
 
   useEffect(() => {
-    document.documentElement.classList.toggle('light', !isDark);
-  }, [isDark]);
+    localStorage.setItem('billflow_theme', isDark ? 'dark' : 'light');
+    if (!isDark) {
+      document.documentElement.classList.add('light');
+      document.documentElement.style.removeProperty('--background');
+    } else {
+      document.documentElement.classList.remove('light');
+      if (settings?.theme_background_hsl) {
+        document.documentElement.style.setProperty(
+          '--background',
+          settings.theme_background_hsl,
+        );
+      }
+    }
+  }, [isDark, settings]);
 
   return (
     <header className="flex items-center justify-between mb-8">
