@@ -51,6 +51,7 @@ export function useSubscriptionStore() {
       toast.success('Subscription added successfully');
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to add subscription');
@@ -78,6 +79,7 @@ export function useSubscriptionStore() {
       toast.success('Subscription updated successfully');
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to update subscription');
@@ -93,6 +95,7 @@ export function useSubscriptionStore() {
       toast.success('Subscription cancelled. Future renewals stopped.');
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to cancel subscription');
@@ -114,6 +117,7 @@ export function useSubscriptionStore() {
       toast.success('Subscription deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to delete subscription');

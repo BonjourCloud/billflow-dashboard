@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { Bill, type BillDocument } from "../models/Bill.js";
 import { RecurringSeries, type RecurringSeriesDocument } from "../models/RecurringSeries.js";
+import { Notification } from "../models/Notification.js";
 
 export const subscriptionCreateSchema = z
   .object({
@@ -474,6 +475,7 @@ export async function deleteRecurringBillWithScope(
   // If one-time bill, standard single deletion
   if (!bill.seriesId || bill.recurrenceType !== "recurring") {
     await Bill.findOneAndDelete({ _id: billId, userId });
+    await Notification.deleteMany({ userId, billId });
     return true;
   }
 
@@ -481,6 +483,7 @@ export async function deleteRecurringBillWithScope(
     // Delete all occurrences and series
     await Bill.deleteMany({ seriesId: bill.seriesId, userId });
     await RecurringSeries.findOneAndDelete({ _id: bill.seriesId, userId });
+    await Notification.deleteMany({ userId, seriesId: bill.seriesId });
     return true;
   }
 
@@ -494,6 +497,11 @@ export async function deleteRecurringBillWithScope(
         seriesId: bill.seriesId,
         dueDate: { $gt: bill.dueDate },
         status: { $ne: "paid" },
+      });
+      await Notification.deleteMany({
+        userId,
+        seriesId: bill.seriesId,
+        dueDate: { $gt: bill.dueDate },
       });
       // 3. End the series at this paid bill's due date
       await RecurringSeries.findOneAndUpdate(
@@ -510,6 +518,11 @@ export async function deleteRecurringBillWithScope(
       seriesId: bill.seriesId,
       dueDate: { $gte: bill.dueDate },
       status: { $ne: "paid" }, // Invariant: never delete any paid bill!
+    });
+    await Notification.deleteMany({
+      userId,
+      seriesId: bill.seriesId,
+      dueDate: { $gte: bill.dueDate },
     });
 
     // 2. Mark this deleted cycle as skipped and set endDate before this occurrence
@@ -539,6 +552,7 @@ export async function deleteRecurringBillWithScope(
 
   // deleteScope === "this"
   await Bill.findOneAndDelete({ _id: billId, userId });
+  await Notification.deleteMany({ userId, billId });
   if (bill.billingCycle) {
     await RecurringSeries.findOneAndUpdate(
       { _id: bill.seriesId, userId },
@@ -700,6 +714,11 @@ export async function cancelRecurringSeriesDirectly(
     dueDate: { $gte: refMidnightUtc },
     status: { $ne: "paid" },
   });
+  await Notification.deleteMany({
+    userId,
+    seriesId,
+    dueDate: { $gte: refMidnightUtc },
+  });
 
   // Check if there is any paid bill at or after refMidnightUtc
   const latestPaidFutureBill = await Bill.findOne({
@@ -760,6 +779,7 @@ export async function deleteRecurringSeriesDirectly(
   if (scope === "all") {
     await Bill.deleteMany({ seriesId, userId });
     await RecurringSeries.findOneAndDelete({ _id: seriesId, userId });
+    await Notification.deleteMany({ seriesId, userId });
     return true;
   }
 

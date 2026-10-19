@@ -10,6 +10,13 @@ import {
   RecurringSeries,
   isValidSeriesId,
 } from "./models/RecurringSeries.js";
+import { Notification, isValidNotificationId } from "./models/Notification.js";
+import {
+  generateRemindersForUser,
+  markNotificationRead,
+  markAllNotificationsRead,
+  dismissNotification,
+} from "./services/reminderService.js";
 import {
   generateDueOccurrencesForUser,
   createRecurringSeriesWithOccurrences,
@@ -636,6 +643,13 @@ app.patch("/api/bills/:id", async (req, res) => {
       return res.status(404).json({ error: "Bill not found." });
     }
 
+    if (bill.status === "paid") {
+      await Notification.updateMany(
+        { userId, billId: req.params.id, isRead: false },
+        { $set: { isRead: true } },
+      );
+    }
+
     return res.status(200).json(bill);
   } catch (error) {
     console.error("Failed to update bill:", error);
@@ -871,6 +885,145 @@ app.delete("/api/subscriptions/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to delete subscription:", error);
     return res.status(500).json({ error: "Failed to delete subscription." });
+  }
+});
+
+// ──────────────────────────────────────────────
+// In-App Notifications (Reminders) Endpoints
+// ──────────────────────────────────────────────
+
+// GET /api/notifications — list active reminders for the authenticated user
+app.get("/api/notifications", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    // 1. Materialize any due recurring occurrences first
+    await generateDueOccurrencesForUser(userId);
+
+    // 2. Materialize any due reminders idempotently
+    await generateRemindersForUser(userId);
+
+    // 3. Query active (non-dismissed) notifications
+    const filter: Record<string, unknown> = {
+      userId,
+      isDismissed: false,
+    };
+
+    if (req.query.status === "unread") {
+      filter.isRead = false;
+    }
+
+    const notifications = await Notification.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    return res.status(200).json(notifications);
+  } catch (error) {
+    console.error("Failed to list notifications:", error);
+    return res.status(500).json({ error: "Failed to list notifications." });
+  }
+});
+
+// GET /api/notifications/unread-count — get count of unread, non-dismissed notifications
+app.get("/api/notifications/unread-count", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const count = await Notification.countDocuments({
+      userId,
+      isDismissed: false,
+      isRead: false,
+    });
+
+    return res.status(200).json({ count });
+  } catch (error) {
+    console.error("Failed to get unread notifications count:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to get unread notifications count." });
+  }
+});
+
+// PATCH /api/notifications/:id/read — mark a single notification as read
+app.patch("/api/notifications/:id/read", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidNotificationId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid notification ID format." });
+    }
+
+    const updated = await markNotificationRead(userId, req.params.id);
+
+    if (!updated) {
+      return res.status(404).json({ error: "Notification not found." });
+    }
+
+    return res.status(200).json(updated);
+  } catch (error) {
+    console.error("Failed to mark notification as read:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to mark notification as read." });
+  }
+});
+
+// PATCH /api/notifications/read-all — mark all active notifications as read
+app.patch("/api/notifications/read-all", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const updatedCount = await markAllNotificationsRead(userId);
+
+    return res.status(200).json({ success: true, updatedCount });
+  } catch (error) {
+    console.error("Failed to mark all notifications as read:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to mark all notifications as read." });
+  }
+});
+
+// PATCH /api/notifications/:id/dismiss — dismiss a notification (soft-delete to preserve dedupe)
+app.patch("/api/notifications/:id/dismiss", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidNotificationId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid notification ID format." });
+    }
+
+    const dismissed = await dismissNotification(userId, req.params.id);
+
+    if (!dismissed) {
+      return res.status(404).json({ error: "Notification not found." });
+    }
+
+    return res.status(200).json(dismissed);
+  } catch (error) {
+    console.error("Failed to dismiss notification:", error);
+    return res.status(500).json({ error: "Failed to dismiss notification." });
   }
 });
 

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export function DashboardHeader() {
   const [isDark, setIsDark] = useState(() => {
@@ -82,6 +83,7 @@ export function DashboardHeader() {
         </button>
       </div>
       <div className="flex items-center gap-1">
+        <NotificationBell />
         {isAdmin && (
           <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="gap-2">
             <Shield className="w-4 h-4" /> Admin

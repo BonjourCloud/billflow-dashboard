@@ -36,6 +36,7 @@ export function useBillStore() {
       toast.success('Bill added successfully');
       queryClient.invalidateQueries({ queryKey: ['bills'] });
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to add bill');
@@ -58,6 +59,7 @@ export function useBillStore() {
       toast.success('Bill updated successfully');
       queryClient.invalidateQueries({ queryKey: ['bills'] });
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to update bill');
@@ -79,6 +81,7 @@ export function useBillStore() {
       toast.success('Bill deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['bills'] });
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to delete bill');
