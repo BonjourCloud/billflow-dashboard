@@ -25,7 +25,7 @@ export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
           const urgency = daysUntil <= 3 ? 'status-overdue' : daysUntil <= 7 ? 'status-pending' : 'status-upcoming';
           return (
             <motion.div
-              key={bill.id}
+              key={bill._id}
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2, delay: 0.15 + i * 0.05 }}

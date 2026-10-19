@@ -11,7 +11,7 @@ interface BillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bill?: Bill | null;
-  onSave: (bill: Omit<Bill, 'id'>) => void;
+  onSave: (bill: Omit<Bill, '_id'>) => void;
   onUpdate: (id: string, updates: Partial<Bill>) => void;
 }
 
@@ -28,7 +28,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
     if (bill) {
       setName(bill.name);
       setAmount(bill.amount.toString());
-      setDueDate(bill.dueDate);
+      setDueDate(bill.dueDate ? new Date(bill.dueDate).toISOString().split('T')[0] : '');
       setStatus(bill.status);
       setCategory(bill.category);
       setIsSubscription(bill.isSubscription);
@@ -52,7 +52,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
     e.preventDefault();
     if (!validate()) return;
     const data = { name, amount: Number(amount), dueDate, status, category, isSubscription };
-    if (bill) onUpdate(bill.id, data);
+    if (bill) onUpdate(bill._id, data);
     else onSave(data);
     onOpenChange(false);
   };

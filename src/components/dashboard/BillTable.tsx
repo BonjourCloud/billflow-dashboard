@@ -6,6 +6,16 @@ import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bil
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 
 interface BillTableProps {
@@ -31,6 +41,7 @@ export function BillTable({
   onAdd, onEdit, onDelete,
 }: BillTableProps) {
   const navigate = useNavigate();
+  const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const toggleSort = (field: 'dueDate' | 'amount') => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     else { setSortBy(field); setSortOrder('asc'); }
@@ -117,7 +128,7 @@ export function BillTable({
             <AnimatePresence mode="popLayout">
               {bills.map(bill => (
                 <motion.tr
-                  key={bill.id}
+                  key={bill._id}
                   layout
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -128,7 +139,7 @@ export function BillTable({
                   <td className="py-3 pl-4">
                     <div
                       className="cursor-pointer hover:text-accent transition-colors"
-                      onClick={() => navigate(`/bill/${bill.id}`)}
+                      onClick={() => navigate(`/bill/${bill._id}`)}
                     >
                       <p className="font-medium text-sm">{bill.name}</p>
                       {bill.isSubscription && <span className="text-xs text-muted-foreground">Recurring</span>}
@@ -143,7 +154,7 @@ export function BillTable({
                       <Button variant="ghost" size="icon" className="h-8 w-8 active:scale-95" onClick={() => onEdit(bill)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive active:scale-95" onClick={() => onDelete(bill.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive active:scale-95" onClick={() => setBillToDelete(bill)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -157,6 +168,31 @@ export function BillTable({
           <p className="text-center text-muted-foreground text-sm py-12">No bills match your filters.</p>
         )}
       </div>
+
+      <AlertDialog open={!!billToDelete} onOpenChange={(open) => { if (!open) setBillToDelete(null); }}>
+        <AlertDialogContent className="glass-card border-border/40 sm:rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Bill</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-semibold text-foreground">{billToDelete?.name}</span>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="active:scale-95 transition-transform">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-95 transition-transform"
+              onClick={() => {
+                if (billToDelete) {
+                  onDelete(billToDelete._id);
+                  setBillToDelete(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

@@ -2,12 +2,14 @@ import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, CreditCard, Building, Wallet, Send, StickyNote,
-  CalendarDays, Tag, RefreshCw, TrendingUp, Clock,
+  CalendarDays, Tag, RefreshCw, TrendingUp, Clock, AlertCircle,
 } from 'lucide-react';
-import { MOCK_BILLS } from '@/data/bills';
+import { Bill } from '@/data/bills';
 import { MOCK_PAYMENTS, MOCK_NOTES, PaymentRecord, BillNote } from '@/data/billDetails';
+import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,7 +29,12 @@ const paymentStatusCls = (s: PaymentRecord['status']) => {
 const BillDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const bill = MOCK_BILLS.find(b => b.id === id);
+
+  const { data: bill, isLoading, isError, error, refetch } = useQuery<Bill>({
+    queryKey: ['bills', id],
+    queryFn: () => apiRequest<Bill>(`/api/bills/${id}`),
+    enabled: !!id,
+  });
 
   const [notes, setNotes] = useState<BillNote[]>(MOCK_NOTES);
   const [newNote, setNewNote] = useState('');
@@ -53,12 +60,46 @@ const BillDetail = () => {
     setNewNote('');
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="glass-card rounded-3xl p-8 text-center max-w-md space-y-4 border-destructive/30">
+          <div className="w-12 h-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-base text-foreground">Failed to load bill</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {error instanceof Error ? error.message : 'The requested bill could not be retrieved.'}
+            </p>
+          </div>
+          <div className="flex justify-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="active:scale-95 transition-transform">
+              Try again
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/dashboard')} className="active:scale-95 transition-transform">
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!bill) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">Bill not found.</p>
-          <Button variant="outline" onClick={() => navigate('/')}>Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigate('/dashboard')}>Back to Dashboard</Button>
         </div>
       </div>
     );
@@ -76,7 +117,7 @@ const BillDetail = () => {
           transition={{ duration: 0.2 }}
           className="flex items-center gap-3 mb-6"
         >
-          <Button variant="ghost" size="icon" className="active:scale-95" onClick={() => navigate('/')}>
+          <Button variant="ghost" size="icon" className="active:scale-95" onClick={() => navigate('/dashboard')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">

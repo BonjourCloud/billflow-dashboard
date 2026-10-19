@@ -1,13 +1,74 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Bill, MOCK_BILLS, BillStatus, BillCategory } from '@/data/bills';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Bill, BillStatus, BillCategory } from '@/data/bills';
+import { apiRequest } from '@/lib/api';
+import { toast } from 'sonner';
 
 export function useBillStore() {
-  const [bills, setBills] = useState<Bill[]>(MOCK_BILLS);
+  const queryClient = useQueryClient();
+
+  const {
+    data: billsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<Bill[]>({
+    queryKey: ['bills'],
+    queryFn: () => apiRequest<Bill[]>('/api/bills'),
+  });
+
+  const bills = useMemo(() => billsData ?? [], [billsData]);
+
   const [filterStatus, setFilterStatus] = useState<BillStatus | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<BillCategory | 'all'>('all');
   const [sortBy, setSortBy] = useState<'dueDate' | 'amount'>('dueDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const addMutation = useMutation({
+    mutationFn: (newBill: Omit<Bill, '_id'>) =>
+      apiRequest<Bill>('/api/bills', {
+        method: 'POST',
+        body: JSON.stringify(newBill),
+      }),
+    onSuccess: () => {
+      toast.success('Bill added successfully');
+      queryClient.invalidateQueries({ queryKey: ['bills'] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to add bill');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Bill> }) =>
+      apiRequest<Bill>(`/api/bills/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }),
+    onSuccess: () => {
+      toast.success('Bill updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['bills'] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update bill');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<void>(`/api/bills/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      toast.success('Bill deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['bills'] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete bill');
+    },
+  });
 
   const filteredBills = useMemo(() => {
     let result = [...bills];
@@ -39,22 +100,42 @@ export function useBillStore() {
     [bills]
   );
 
-  const addBill = useCallback((bill: Omit<Bill, 'id'>) => {
-    setBills(prev => [...prev, { ...bill, id: crypto.randomUUID() }]);
-  }, []);
+  const addBill = useCallback((bill: Omit<Bill, '_id'>) => {
+    addMutation.mutate(bill);
+  }, [addMutation]);
 
   const updateBill = useCallback((id: string, updates: Partial<Bill>) => {
-    setBills(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  }, []);
+    updateMutation.mutate({ id, updates });
+  }, [updateMutation]);
 
   const deleteBill = useCallback((id: string) => {
-    setBills(prev => prev.filter(b => b.id !== id));
-  }, []);
+    deleteMutation.mutate(id);
+  }, [deleteMutation]);
 
   return {
-    bills: filteredBills, allBills: bills, stats, upcomingBills,
-    filterStatus, setFilterStatus, filterCategory, setFilterCategory,
-    sortBy, setSortBy, sortOrder, setSortOrder, searchQuery, setSearchQuery,
-    addBill, updateBill, deleteBill,
+    bills: filteredBills,
+    allBills: bills,
+    stats,
+    upcomingBills,
+    filterStatus,
+    setFilterStatus,
+    filterCategory,
+    setFilterCategory,
+    sortBy,
+    setSortBy,
+    sortOrder,
+    setSortOrder,
+    searchQuery,
+    setSearchQuery,
+    addBill,
+    updateBill,
+    deleteBill,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isAdding: addMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
   };
 }

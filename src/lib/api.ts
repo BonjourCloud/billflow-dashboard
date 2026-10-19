@@ -52,7 +52,17 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    const message = await response.text();
+    const raw = await response.text();
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.error === "string") {
+        message = parsed.error;
+      }
+    } catch {
+      // Not JSON, keep raw text
+    }
+
     throw new Error(
       message || `API request failed with status ${response.status}.`,
     );

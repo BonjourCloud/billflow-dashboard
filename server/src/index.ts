@@ -5,6 +5,8 @@ import cors from "cors";
 import helmet from "helmet";
 import { connectDB } from "./config/db.js";
 import { User } from "./models/User.js";
+import { Bill, isValidBillId } from "./models/Bill.js";
+import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { s3Client, s3Bucket } from "./config/s3.js";
@@ -397,6 +399,185 @@ app.post("/api/admin/branding/logo", (req, res, next) => {
   } catch (error) {
     console.error("Failed to upload branding logo:", error);
     return res.status(500).json({ error: "Failed to upload logo." });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Bill CRUD
+// ──────────────────────────────────────────────
+
+export const billBodySchema = z
+  .object({
+    name: z.string().trim().min(1, "Bill name is required.").max(100),
+    amount: z.number().positive("Amount must be a positive number."),
+    dueDate: z
+      .string()
+      .trim()
+      .min(1, "Due date is required.")
+      .refine(
+        (val) => {
+          const timestamp = Date.parse(val);
+          return !Number.isNaN(timestamp);
+        },
+        { message: "Invalid date format. Expected a valid date string." },
+      )
+      .transform((val) => new Date(val)),
+    status: z.enum(["paid", "pending", "overdue"]),
+    category: z.enum([
+      "utilities",
+      "entertainment",
+      "software",
+      "finance",
+      "insurance",
+      "housing",
+    ]),
+    isSubscription: z.boolean(),
+  })
+  .strict();
+
+export const billUpdateSchema = billBodySchema.partial();
+
+// GET /api/bills — list all bills for the authenticated user
+app.get("/api/bills", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const bills = await Bill.find({ userId })
+      .sort({ dueDate: 1 })
+      .lean();
+
+    return res.status(200).json(bills);
+  } catch (error) {
+    console.error("Failed to list bills:", error);
+    return res.status(500).json({ error: "Failed to list bills." });
+  }
+});
+
+// GET /api/bills/:id — get a single bill (owner check)
+app.get("/api/bills/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOne({
+      _id: req.params.id,
+      userId,
+    }).lean();
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    return res.status(200).json(bill);
+  } catch (error) {
+    console.error("Failed to load bill:", error);
+    return res.status(500).json({ error: "Failed to load bill." });
+  }
+});
+
+// POST /api/bills — create a new bill
+app.post("/api/bills", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = billBodySchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid bill data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const bill = await Bill.create({ ...parsed.data, userId });
+
+    return res.status(201).json(bill.toObject());
+  } catch (error) {
+    console.error("Failed to create bill:", error);
+    return res.status(500).json({ error: "Failed to create bill." });
+  }
+});
+
+// PATCH /api/bills/:id — update a bill (owner check)
+app.patch("/api/bills/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const parsed = billUpdateSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid bill data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const bill = await Bill.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { $set: parsed.data },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    return res.status(200).json(bill);
+  } catch (error) {
+    console.error("Failed to update bill:", error);
+    return res.status(500).json({ error: "Failed to update bill." });
+  }
+});
+
+// DELETE /api/bills/:id — delete a bill (owner check)
+app.delete("/api/bills/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOneAndDelete({
+      _id: req.params.id,
+      userId,
+    });
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Failed to delete bill:", error);
+    return res.status(500).json({ error: "Failed to delete bill." });
   }
 });
 
