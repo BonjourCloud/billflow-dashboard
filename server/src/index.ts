@@ -7,10 +7,19 @@ import { connectDB } from "./config/db.js";
 import { User } from "./models/User.js";
 import { Bill, isValidBillId, type BillDocument } from "./models/Bill.js";
 import {
+  RecurringSeries,
+  isValidSeriesId,
+} from "./models/RecurringSeries.js";
+import {
   generateDueOccurrencesForUser,
   createRecurringSeriesWithOccurrences,
   updateRecurringBillWithScope,
   deleteRecurringBillWithScope,
+  updateRecurringSeriesDirectly,
+  cancelRecurringSeriesDirectly,
+  deleteRecurringSeriesDirectly,
+  subscriptionCreateSchema,
+  subscriptionUpdateSchema,
 } from "./services/recurrenceService.js";
 import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -665,6 +674,203 @@ app.delete("/api/bills/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to delete bill:", error);
     return res.status(500).json({ error: "Failed to delete bill." });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Subscriptions (RecurringSeries) Endpoints
+// ──────────────────────────────────────────────
+
+export { subscriptionCreateSchema, subscriptionUpdateSchema };
+
+// GET /api/subscriptions — list all subscriptions for the authenticated user
+app.get("/api/subscriptions", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    // Materialize any due recurring occurrences idempotently
+    await generateDueOccurrencesForUser(userId);
+
+    const statusParam = req.query.status;
+    const filter: Record<string, unknown> = { userId };
+    if (statusParam === "active") {
+      filter.isActive = true;
+    } else if (statusParam === "inactive") {
+      filter.isActive = false;
+    }
+
+    const subscriptions = await RecurringSeries.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(subscriptions);
+  } catch (error) {
+    console.error("Failed to list subscriptions:", error);
+    return res.status(500).json({ error: "Failed to list subscriptions." });
+  }
+});
+
+// GET /api/subscriptions/:id — retrieve a single subscription
+app.get("/api/subscriptions/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidSeriesId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid subscription ID format." });
+    }
+
+    const subscription = await RecurringSeries.findOne({
+      _id: req.params.id,
+      userId,
+    }).lean();
+
+    if (!subscription) {
+      return res.status(404).json({ error: "Subscription not found." });
+    }
+
+    return res.status(200).json(subscription);
+  } catch (error) {
+    console.error("Failed to load subscription:", error);
+    return res.status(500).json({ error: "Failed to load subscription." });
+  }
+});
+
+// POST /api/subscriptions — create a new subscription
+app.post("/api/subscriptions", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = subscriptionCreateSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid subscription data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const { series } = await createRecurringSeriesWithOccurrences(
+      userId,
+      {
+        name: parsed.data.name,
+        amount: parsed.data.amount,
+        category: parsed.data.category,
+        dueDate: parsed.data.startDate,
+        recurringDay: parsed.data.recurringDay,
+        initialStatus: parsed.data.initialStatus,
+      },
+    );
+
+    return res.status(201).json(series);
+  } catch (error) {
+    console.error("Failed to create subscription:", error);
+    return res.status(500).json({ error: "Failed to create subscription." });
+  }
+});
+
+// PATCH /api/subscriptions/:id — update an existing subscription
+app.patch("/api/subscriptions/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidSeriesId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid subscription ID format." });
+    }
+
+    const parsed = subscriptionUpdateSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid subscription data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const updated = await updateRecurringSeriesDirectly(
+      userId,
+      req.params.id,
+      parsed.data,
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: "Subscription not found." });
+    }
+
+    return res.status(200).json(updated);
+  } catch (error) {
+    console.error("Failed to update subscription:", error);
+    return res.status(500).json({ error: "Failed to update subscription." });
+  }
+});
+
+// PATCH /api/subscriptions/:id/cancel — cancel a subscription
+app.patch("/api/subscriptions/:id/cancel", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidSeriesId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid subscription ID format." });
+    }
+
+    const cancelled = await cancelRecurringSeriesDirectly(userId, req.params.id);
+
+    if (!cancelled) {
+      return res.status(404).json({ error: "Subscription not found." });
+    }
+
+    return res.status(200).json(cancelled);
+  } catch (error) {
+    console.error("Failed to cancel subscription:", error);
+    return res.status(500).json({ error: "Failed to cancel subscription." });
+  }
+});
+
+// DELETE /api/subscriptions/:id — delete a subscription (scope=future or scope=all)
+app.delete("/api/subscriptions/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidSeriesId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid subscription ID format." });
+    }
+
+    const rawScope = req.query.scope;
+    const scope: "future" | "all" = rawScope === "all" ? "all" : "future";
+
+    const deleted = await deleteRecurringSeriesDirectly(userId, req.params.id, scope);
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Subscription not found." });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error("Failed to delete subscription:", error);
+    return res.status(500).json({ error: "Failed to delete subscription." });
   }
 });
 

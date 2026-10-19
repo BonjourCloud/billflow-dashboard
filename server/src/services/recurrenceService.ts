@@ -1,6 +1,54 @@
 import mongoose from "mongoose";
+import { z } from "zod";
 import { Bill, type BillDocument } from "../models/Bill.js";
 import { RecurringSeries, type RecurringSeriesDocument } from "../models/RecurringSeries.js";
+
+export const subscriptionCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Subscription name is required.").max(100),
+    amount: z.number().positive("Amount must be a positive number."),
+    category: z.enum([
+      "utilities",
+      "entertainment",
+      "software",
+      "finance",
+      "insurance",
+      "housing",
+    ]),
+    recurringDay: z.number().int().min(1).max(31).optional(),
+    startDate: z
+      .string()
+      .trim()
+      .min(1, "Start date is required.")
+      .refine(
+        (val) => {
+          const timestamp = Date.parse(val);
+          return !Number.isNaN(timestamp);
+        },
+        { message: "Invalid date format. Expected a valid date string." },
+      )
+      .transform((val) => new Date(val)),
+    initialStatus: z.enum(["paid", "pending", "overdue"]).optional(),
+  })
+  .strict();
+
+export const subscriptionUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Subscription name is required.").max(100).optional(),
+    amount: z.number().positive("Amount must be a positive number.").optional(),
+    category: z
+      .enum([
+        "utilities",
+        "entertainment",
+        "software",
+        "finance",
+        "insurance",
+        "housing",
+      ])
+      .optional(),
+    recurringDay: z.number().int().min(1).max(31).optional(),
+  })
+  .strict();
 
 /**
  * Calculates the occurrence due date with month-end clamping.
@@ -264,13 +312,23 @@ export async function createRecurringSeriesWithOccurrences(
     data.dueDate.getUTCMonth(),
   );
 
-  // Create initial occurrence with the requested status
+  const refTimeMidnightUtc = Date.UTC(
+    referenceDate.getUTCFullYear(),
+    referenceDate.getUTCMonth(),
+    referenceDate.getUTCDate(),
+  );
+
+  const isInitialPastDue = data.dueDate.getTime() < refTimeMidnightUtc;
+  const resolvedStatus =
+    data.initialStatus ?? (isInitialPastDue ? "overdue" : "pending");
+
+  // Create initial occurrence with the requested or past-due determined status
   const primaryBill = await Bill.create({
     userId,
     name: data.name,
     amount: data.amount,
     dueDate: data.dueDate,
-    status: data.initialStatus ?? "pending",
+    status: resolvedStatus,
     category: data.category,
     isSubscription: true,
     recurrenceType: "recurring",
@@ -488,4 +546,224 @@ export async function deleteRecurringBillWithScope(
     );
   }
   return true;
+}
+
+/**
+ * Directly updates a RecurringSeries contract and synchronizes future pending occurrences.
+ * Paid historical occurrences are strictly preserved and never mutated.
+ */
+export async function updateRecurringSeriesDirectly(
+  userId: string,
+  seriesId: string,
+  updates: {
+    name?: string;
+    amount?: number;
+    category?:
+      | "utilities"
+      | "entertainment"
+      | "software"
+      | "finance"
+      | "insurance"
+      | "housing";
+    recurringDay?: number;
+  },
+  referenceDate: Date = new Date(),
+): Promise<RecurringSeriesDocument | null> {
+  const series = await RecurringSeries.findOne({ _id: seriesId, userId });
+  if (!series) {
+    return null;
+  }
+
+  const seriesUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) seriesUpdates.name = updates.name;
+  if (updates.amount !== undefined) seriesUpdates.amount = updates.amount;
+  if (updates.category !== undefined) seriesUpdates.category = updates.category;
+  if (
+    typeof updates.recurringDay === "number" &&
+    updates.recurringDay >= 1 &&
+    updates.recurringDay <= 31
+  ) {
+    seriesUpdates.recurringDay = updates.recurringDay;
+  }
+
+  const updatedSeries = await RecurringSeries.findOneAndUpdate(
+    { _id: seriesId, userId },
+    { $set: seriesUpdates },
+    { new: true, runValidators: true },
+  ).lean();
+
+  if (!updatedSeries) {
+    return null;
+  }
+
+  // Update future pending occurrences (never touch paid records!)
+  const refMidnightUtc = Date.UTC(
+    referenceDate.getUTCFullYear(),
+    referenceDate.getUTCMonth(),
+    referenceDate.getUTCDate(),
+  );
+
+  const futurePendingUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) futurePendingUpdates.name = updates.name;
+  if (updates.amount !== undefined) futurePendingUpdates.amount = updates.amount;
+  if (updates.category !== undefined) futurePendingUpdates.category = updates.category;
+
+  const resolvedRecurringDay = updates.recurringDay;
+
+  if (resolvedRecurringDay !== undefined) {
+    const futurePendingBills = await Bill.find({
+      userId,
+      seriesId,
+      dueDate: { $gte: new Date(refMidnightUtc) },
+      status: "pending",
+    });
+
+    for (const futureBill of futurePendingBills) {
+      const year = futureBill.dueDate.getUTCFullYear();
+      const monthIndex = futureBill.dueDate.getUTCMonth();
+      const newDueDate = calculateOccurrenceDueDate(
+        resolvedRecurringDay,
+        year,
+        monthIndex,
+      );
+      const isPastDue = newDueDate.getTime() < refMidnightUtc;
+      const statusUpdate = isPastDue ? { status: "overdue" as const } : {};
+      await Bill.updateOne(
+        { _id: futureBill._id, userId },
+        {
+          $set: {
+            ...futurePendingUpdates,
+            dueDate: newDueDate,
+            ...statusUpdate,
+          },
+        },
+      );
+    }
+  } else if (Object.keys(futurePendingUpdates).length > 0) {
+    await Bill.updateMany(
+      {
+        userId,
+        seriesId,
+        dueDate: { $gte: new Date(refMidnightUtc) },
+        status: "pending",
+      },
+      { $set: futurePendingUpdates },
+    );
+  }
+
+  return updatedSeries;
+}
+
+/**
+ * Directly cancels a RecurringSeries contract:
+ * - Sets isActive = false, endDate = referenceDate.
+ * - Deletes future unpaid occurrences (dueDate >= referenceDate, status != 'paid').
+ * - Preserves all paid historical occurrences and past records.
+ */
+export async function cancelRecurringSeriesDirectly(
+  userId: string,
+  seriesId: string,
+  referenceDate: Date = new Date(),
+): Promise<RecurringSeriesDocument | null> {
+  const series = await RecurringSeries.findOne({ _id: seriesId, userId });
+  if (!series) {
+    return null;
+  }
+
+  const refMidnightUtc = new Date(
+    Date.UTC(
+      referenceDate.getUTCFullYear(),
+      referenceDate.getUTCMonth(),
+      referenceDate.getUTCDate(),
+    ),
+  );
+
+  // Find all unpaid occurrences at or after the cancellation reference date to track their cycles
+  const unpaidFutureBills = await Bill.find({
+    userId,
+    seriesId,
+    dueDate: { $gte: refMidnightUtc },
+    status: { $ne: "paid" },
+  })
+    .select("billingCycle")
+    .lean();
+
+  const deletedCycles = unpaidFutureBills
+    .map((b) => b.billingCycle)
+    .filter((c): c is string => typeof c === "string" && c.length > 0);
+
+  // 1. Delete unpaid occurrences at or after the cancellation reference date
+  // Invariant: never delete any paid bill!
+  await Bill.deleteMany({
+    userId,
+    seriesId,
+    dueDate: { $gte: refMidnightUtc },
+    status: { $ne: "paid" },
+  });
+
+  // Check if there is any paid bill at or after refMidnightUtc
+  const latestPaidFutureBill = await Bill.findOne({
+    userId,
+    seriesId,
+    dueDate: { $gte: refMidnightUtc },
+    status: "paid",
+  })
+    .sort({ dueDate: -1 })
+    .lean();
+
+  // If a paid occurrence exists on or after referenceDate (e.g. prepaid), clamp to its dueDate;
+  // otherwise, clamp strictly to the day before referenceDate so that getDueCycles
+  // (which tests `dueDate > endDayUtc`) cannot regenerate a cancelled cycle due on referenceDate.
+  const effectiveEndDate = latestPaidFutureBill
+    ? latestPaidFutureBill.dueDate
+    : new Date(refMidnightUtc.getTime() - 86400000);
+
+  const seriesUpdate: Record<string, unknown> = {
+    isActive: false,
+    endDate: effectiveEndDate,
+  };
+
+  const updateOp: Record<string, unknown> = {
+    $set: seriesUpdate,
+  };
+
+  if (deletedCycles.length > 0) {
+    updateOp.$addToSet = { skippedCycles: { $each: deletedCycles } };
+  }
+
+  // 2. Mark series as inactive, set effectiveEndDate, and record skippedCycles
+  const updatedSeries = await RecurringSeries.findOneAndUpdate(
+    { _id: seriesId, userId },
+    updateOp,
+    { new: true },
+  ).lean();
+
+  return updatedSeries;
+}
+
+/**
+ * Deletes a RecurringSeries with scope:
+ * - "future": Cancels the series, deletes future unpaid occurrences, preserves paid records.
+ * - "all": Hard delete of the series and all linked occurrences (including paid history).
+ */
+export async function deleteRecurringSeriesDirectly(
+  userId: string,
+  seriesId: string,
+  scope: "future" | "all" = "future",
+  referenceDate: Date = new Date(),
+): Promise<boolean> {
+  const series = await RecurringSeries.findOne({ _id: seriesId, userId });
+  if (!series) {
+    return false;
+  }
+
+  if (scope === "all") {
+    await Bill.deleteMany({ seriesId, userId });
+    await RecurringSeries.findOneAndDelete({ _id: seriesId, userId });
+    return true;
+  }
+
+  // scope === "future"
+  const cancelled = await cancelRecurringSeriesDirectly(userId, seriesId, referenceDate);
+  return Boolean(cancelled);
 }
