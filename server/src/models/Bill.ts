@@ -52,12 +52,39 @@ const billSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    recurrenceType: {
+      type: String,
+      enum: ["one_time", "recurring"],
+      default: "one_time",
+    },
+    seriesId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RecurringSeries",
+      default: null,
+      index: true,
+    },
+    billingCycle: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   },
 );
+
+billSchema.index(
+  { seriesId: 1, billingCycle: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      seriesId: { $type: "objectId" },
+      billingCycle: { $type: "string" },
+    },
+  },
+);
+
 
 export type BillDocument = InferSchemaType<typeof billSchema>;
 

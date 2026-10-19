@@ -122,7 +122,12 @@ const BillDetail = () => {
           </Button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold">{bill.name}</h1>
-            <p className="text-sm text-muted-foreground capitalize">{bill.category} • {bill.isSubscription ? 'Recurring' : 'One-time'}</p>
+            <p className="text-sm text-muted-foreground capitalize">
+              {bill.category} •{' '}
+              {bill.recurrenceType === 'recurring' || bill.isSubscription
+                ? `Monthly Recurring${bill.billingCycle ? ` (${bill.billingCycle})` : ''}`
+                : 'One-time'}
+            </p>
           </div>
           <span className={`text-xs font-medium px-3 py-1.5 rounded-full border ${statusCls} capitalize`}>{bill.status}</span>
         </motion.div>

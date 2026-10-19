@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X, Repeat } from 'lucide-react';
 import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ interface BillTableProps {
   setSearchQuery: (q: string) => void;
   onAdd: () => void;
   onEdit: (bill: Bill) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, scope?: 'this' | 'future' | 'all') => void;
 }
 
 export function BillTable({
@@ -42,6 +42,8 @@ export function BillTable({
 }: BillTableProps) {
   const navigate = useNavigate();
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
+  const [deleteScopeChoice, setDeleteScopeChoice] = useState<'this' | 'future'>('this');
+
   const toggleSort = (field: 'dueDate' | 'amount') => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     else { setSortBy(field); setSortOrder('asc'); }
@@ -51,6 +53,10 @@ export function BillTable({
     const cls = status === 'paid' ? 'badge-paid' : status === 'overdue' ? 'badge-overdue' : 'badge-pending';
     return <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${cls} capitalize`}>{status}</span>;
   };
+
+  const isRecurring = Boolean(
+    billToDelete && (billToDelete.seriesId || billToDelete.recurrenceType === 'recurring' || billToDelete.isSubscription)
+  );
 
   return (
     <motion.div
@@ -126,41 +132,60 @@ export function BillTable({
           </thead>
           <tbody>
             <AnimatePresence mode="popLayout">
-              {bills.map(bill => (
-                <motion.tr
-                  key={bill._id}
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="group border-t border-border/20 hover:bg-secondary/30 transition-colors duration-150"
-                >
-                  <td className="py-3 pl-4">
-                    <div
-                      className="cursor-pointer hover:text-accent transition-colors"
-                      onClick={() => navigate(`/bill/${bill._id}`)}
-                    >
-                      <p className="font-medium text-sm">{bill.name}</p>
-                      {bill.isSubscription && <span className="text-xs text-muted-foreground">Recurring</span>}
-                    </div>
-                  </td>
-                  <td className="py-3 capitalize text-sm text-muted-foreground">{bill.category}</td>
-                  <td className="py-3 font-mono-data text-sm font-semibold">${bill.amount.toFixed(2)}</td>
-                  <td className="py-3 font-mono-data text-sm text-muted-foreground">{format(new Date(bill.dueDate), 'MMM dd, yyyy')}</td>
-                  <td className="py-3">{statusBadge(bill.status)}</td>
-                  <td className="py-3 pr-4">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 active:scale-95" onClick={() => onEdit(bill)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive active:scale-95" onClick={() => setBillToDelete(bill)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
+              {bills.map(bill => {
+                const billIsRecurring = bill.recurrenceType === 'recurring' || bill.isSubscription;
+                return (
+                  <motion.tr
+                    key={bill._id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="group border-t border-border/20 hover:bg-secondary/30 transition-colors duration-150"
+                  >
+                    <td className="py-3 pl-4">
+                      <div
+                        className="cursor-pointer hover:text-accent transition-colors"
+                        onClick={() => navigate(`/bill/${bill._id}`)}
+                      >
+                        <p className="font-medium text-sm">{bill.name}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {billIsRecurring ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                              <Repeat className="w-2.5 h-2.5" /> Recurring
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">One-time</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 capitalize text-sm text-muted-foreground">{bill.category}</td>
+                    <td className="py-3 font-mono-data text-sm font-semibold">${bill.amount.toFixed(2)}</td>
+                    <td className="py-3 font-mono-data text-sm text-muted-foreground">{format(new Date(bill.dueDate), 'MMM dd, yyyy')}</td>
+                    <td className="py-3">{statusBadge(bill.status)}</td>
+                    <td className="py-3 pr-4">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 active:scale-95" onClick={() => onEdit(bill)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive active:scale-95"
+                          onClick={() => {
+                            setBillToDelete(bill);
+                            setDeleteScopeChoice('this');
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                );
+              })}
             </AnimatePresence>
           </tbody>
         </table>
@@ -169,26 +194,96 @@ export function BillTable({
         )}
       </div>
 
-      <AlertDialog open={!!billToDelete} onOpenChange={(open) => { if (!open) setBillToDelete(null); }}>
+      {/* Delete Confirmation AlertDialog */}
+      <AlertDialog
+        open={!!billToDelete}
+        onOpenChange={(open) => {
+          if (!open) setBillToDelete(null);
+        }}
+      >
         <AlertDialogContent className="glass-card border-border/40 sm:rounded-3xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Bill</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete <span className="font-semibold text-foreground">{billToDelete?.name}</span>? This action cannot be undone.
+            <AlertDialogTitle>
+              {isRecurring ? 'Delete Recurring Bill' : 'Delete Bill'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <span>
+                Are you sure you want to delete{' '}
+                <span className="font-semibold text-foreground">{billToDelete?.name}</span>?
+              </span>
+
+              {isRecurring && (
+                <div className="pt-2 text-left space-y-2">
+                  <p className="text-xs font-semibold text-foreground">Select deletion scope:</p>
+                  <div className="space-y-2">
+                    <label
+                      onClick={() => setDeleteScopeChoice('this')}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                        deleteScopeChoice === 'this'
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border/40 bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="deleteScope"
+                        checked={deleteScopeChoice === 'this'}
+                        onChange={() => setDeleteScopeChoice('this')}
+                        className="mt-0.5 text-primary"
+                      />
+                      <div className="text-xs">
+                        <span className="font-medium text-foreground block">
+                          Delete this occurrence only
+                        </span>
+                        <span>Removes this month&apos;s bill. Future recurring cycles continue uninterrupted.</span>
+                      </div>
+                    </label>
+
+                    <label
+                      onClick={() => setDeleteScopeChoice('future')}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                        deleteScopeChoice === 'future'
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border/40 bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="deleteScope"
+                        checked={deleteScopeChoice === 'future'}
+                        onChange={() => setDeleteScopeChoice('future')}
+                        className="mt-0.5 text-primary"
+                      />
+                      <div className="text-xs">
+                        <span className="font-medium text-foreground block">
+                          Stop all future recurring occurrences
+                        </span>
+                        <span>Cancels the recurring series. Past paid occurrences remain safely saved in your records.</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="active:scale-95 transition-transform">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="active:scale-95 transition-transform">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-95 transition-transform"
               onClick={() => {
                 if (billToDelete) {
-                  onDelete(billToDelete._id);
+                  onDelete(billToDelete._id, isRecurring ? deleteScopeChoice : 'this');
                   setBillToDelete(null);
                 }
               }}
             >
-              Delete
+              {isRecurring
+                ? deleteScopeChoice === 'future'
+                  ? 'Stop Future Occurrences'
+                  : 'Delete This Occurrence'
+                : 'Delete Bill'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

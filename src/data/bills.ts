@@ -9,6 +9,10 @@ export interface Bill {
   status: BillStatus;
   category: BillCategory;
   isSubscription: boolean;
+  recurrenceType?: 'one_time' | 'recurring';
+  seriesId?: string | null;
+  billingCycle?: string | null;
+  recurringDay?: number;
 }
 
 export const CATEGORIES: BillCategory[] = ['utilities', 'entertainment', 'software', 'finance', 'insurance', 'housing'];

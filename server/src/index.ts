@@ -6,6 +6,12 @@ import helmet from "helmet";
 import { connectDB } from "./config/db.js";
 import { User } from "./models/User.js";
 import { Bill, isValidBillId } from "./models/Bill.js";
+import {
+  generateDueOccurrencesForUser,
+  createRecurringSeriesWithOccurrences,
+  updateRecurringBillWithScope,
+  deleteRecurringBillWithScope,
+} from "./services/recurrenceService.js";
 import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
@@ -431,11 +437,57 @@ export const billBodySchema = z
       "insurance",
       "housing",
     ]),
-    isSubscription: z.boolean(),
+    isSubscription: z.boolean().optional(),
+    recurrenceType: z.enum(["one_time", "recurring"]).optional(),
+    recurringDay: z.number().int().min(1).max(31).optional(),
+  })
+  .strict()
+  .transform((data) => {
+    const recurrenceType =
+      data.recurrenceType ?? (data.isSubscription ? "recurring" : "one_time");
+    const isSubscription =
+      data.isSubscription ?? (recurrenceType === "recurring");
+    return {
+      ...data,
+      recurrenceType,
+      isSubscription,
+    };
+  });
+
+export const billUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Bill name is required.").max(100).optional(),
+    amount: z.number().positive("Amount must be a positive number.").optional(),
+    dueDate: z
+      .string()
+      .trim()
+      .min(1, "Due date is required.")
+      .refine(
+        (val) => {
+          const timestamp = Date.parse(val);
+          return !Number.isNaN(timestamp);
+        },
+        { message: "Invalid date format. Expected a valid date string." },
+      )
+      .transform((val) => new Date(val))
+      .optional(),
+    status: z.enum(["paid", "pending", "overdue"]).optional(),
+    category: z
+      .enum([
+        "utilities",
+        "entertainment",
+        "software",
+        "finance",
+        "insurance",
+        "housing",
+      ])
+      .optional(),
+    isSubscription: z.boolean().optional(),
+    recurrenceType: z.enum(["one_time", "recurring"]).optional(),
+    recurringDay: z.number().int().min(1).max(31).optional(),
+    updateScope: z.enum(["this", "future"]).optional(),
   })
   .strict();
-
-export const billUpdateSchema = billBodySchema.partial();
 
 // GET /api/bills — list all bills for the authenticated user
 app.get("/api/bills", async (req, res) => {
@@ -445,6 +497,9 @@ app.get("/api/bills", async (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: "Authentication required." });
     }
+
+    // Materialize any due recurring occurrences idempotently
+    await generateDueOccurrencesForUser(userId);
 
     const bills = await Bill.find({ userId })
       .sort({ dueDate: 1 })
@@ -486,7 +541,7 @@ app.get("/api/bills/:id", async (req, res) => {
   }
 });
 
-// POST /api/bills — create a new bill
+// POST /api/bills — create a new bill (one-time or recurring)
 app.post("/api/bills", async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -504,7 +559,31 @@ app.post("/api/bills", async (req, res) => {
       });
     }
 
-    const bill = await Bill.create({ ...parsed.data, userId });
+    if (parsed.data.recurrenceType === "recurring") {
+      const { primaryBill } = await createRecurringSeriesWithOccurrences(
+        userId,
+        {
+          name: parsed.data.name,
+          amount: parsed.data.amount,
+          category: parsed.data.category,
+          dueDate: parsed.data.dueDate,
+          recurringDay: parsed.data.recurringDay,
+          initialStatus: parsed.data.status,
+        },
+      );
+      return res.status(201).json(primaryBill);
+    }
+
+    const bill = await Bill.create({
+      name: parsed.data.name,
+      amount: parsed.data.amount,
+      dueDate: parsed.data.dueDate,
+      status: parsed.data.status,
+      category: parsed.data.category,
+      isSubscription: parsed.data.isSubscription,
+      recurrenceType: "one_time",
+      userId,
+    });
 
     return res.status(201).json(bill.toObject());
   } catch (error) {
@@ -513,7 +592,7 @@ app.post("/api/bills", async (req, res) => {
   }
 });
 
-// PATCH /api/bills/:id — update a bill (owner check)
+// PATCH /api/bills/:id — update a bill (owner check, with optional updateScope)
 app.patch("/api/bills/:id", async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -535,11 +614,14 @@ app.patch("/api/bills/:id", async (req, res) => {
       });
     }
 
-    const bill = await Bill.findOneAndUpdate(
-      { _id: req.params.id, userId },
-      { $set: parsed.data },
-      { new: true, runValidators: true },
-    ).lean();
+    const { updateScope = "this", ...updates } = parsed.data;
+
+    const bill = await updateRecurringBillWithScope(
+      userId,
+      req.params.id,
+      updates as Partial<BillDocument>,
+      updateScope,
+    );
 
     if (!bill) {
       return res.status(404).json({ error: "Bill not found." });
@@ -552,7 +634,7 @@ app.patch("/api/bills/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/bills/:id — delete a bill (owner check)
+// DELETE /api/bills/:id — delete a bill (owner check, with optional deleteScope)
 app.delete("/api/bills/:id", async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -565,12 +647,17 @@ app.delete("/api/bills/:id", async (req, res) => {
       return res.status(400).json({ error: "Invalid bill ID format." });
     }
 
-    const bill = await Bill.findOneAndDelete({
-      _id: req.params.id,
-      userId,
-    });
+    const rawScope = req.query.scope;
+    const scope: "this" | "future" | "all" =
+      rawScope === "future" || rawScope === "all" ? rawScope : "this";
 
-    if (!bill) {
+    const deleted = await deleteRecurringBillWithScope(
+      userId,
+      req.params.id,
+      scope,
+    );
+
+    if (!deleted) {
       return res.status(404).json({ error: "Bill not found." });
     }
 

@@ -42,7 +42,13 @@ export function useBillStore() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<Bill> }) =>
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: Partial<Bill> & { updateScope?: 'this' | 'future' };
+    }) =>
       apiRequest<Bill>(`/api/bills/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(updates),
@@ -57,8 +63,14 @@ export function useBillStore() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<void>(`/api/bills/${id}`, {
+    mutationFn: ({
+      id,
+      scope = 'this',
+    }: {
+      id: string;
+      scope?: 'this' | 'future' | 'all';
+    }) =>
+      apiRequest<void>(`/api/bills/${id}?scope=${scope}`, {
         method: 'DELETE',
       }),
     onSuccess: () => {
@@ -104,13 +116,22 @@ export function useBillStore() {
     addMutation.mutate(bill);
   }, [addMutation]);
 
-  const updateBill = useCallback((id: string, updates: Partial<Bill>) => {
-    updateMutation.mutate({ id, updates });
-  }, [updateMutation]);
+  const updateBill = useCallback(
+    (
+      id: string,
+      updates: Partial<Bill> & { updateScope?: 'this' | 'future' },
+    ) => {
+      updateMutation.mutate({ id, updates });
+    },
+    [updateMutation],
+  );
 
-  const deleteBill = useCallback((id: string) => {
-    deleteMutation.mutate(id);
-  }, [deleteMutation]);
+  const deleteBill = useCallback(
+    (id: string, scope?: 'this' | 'future' | 'all') => {
+      deleteMutation.mutate({ id, scope });
+    },
+    [deleteMutation],
+  );
 
   return {
     bills: filteredBills,
