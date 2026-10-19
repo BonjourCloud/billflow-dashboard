@@ -9,7 +9,7 @@ import { BillTable } from '@/components/dashboard/BillTable';
 import { BillDialog } from '@/components/dashboard/BillDialog';
 import { SpendingChartWidget } from '@/components/dashboard/SpendingChartWidget';
 import { Button } from '@/components/ui/button';
-import { Bill } from '@/data/bills';
+import { Bill, BillCategory } from '@/data/bills';
 
 const Index = () => {
   const store = useBillStore();
@@ -63,8 +63,8 @@ const Index = () => {
         <div className="grid grid-cols-12 gap-4">
           <HeroWidget {...store.stats} />
           <UpcomingBillsWidget bills={store.upcomingBills} />
-          <SpendingChartWidget bills={store.allBills} activeCategory={store.filterCategory} onCategoryClick={(cat) => store.setFilterCategory(cat as any)} />
-          <AIInsightsWidget />
+          <SpendingChartWidget bills={store.allBills} activeCategory={store.filterCategory} onCategoryClick={(cat) => store.setFilterCategory(cat as BillCategory | 'all')} />
+          <AIInsightsWidget bills={store.allBills} isLoading={store.isLoading} />
           <BillTable
             bills={store.bills}
             filterStatus={store.filterStatus}

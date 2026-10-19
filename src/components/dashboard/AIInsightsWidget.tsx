@@ -1,11 +1,16 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
+import { Bill } from '@/data/bills';
+import { calculateInsights } from '@/lib/insights';
 
-export function AIInsightsWidget() {
-  const insights = [
-    { text: 'Potential duplicate detected: Netflix & Hulu both charge for streaming entertainment.', type: 'warning' as const },
-    { text: 'Cloud Services spending increased 15% this month — AWS and GitHub Copilot combined.', type: 'info' as const },
-  ];
+interface AIInsightsWidgetProps {
+  bills?: Bill[];
+  isLoading?: boolean;
+}
+
+export function AIInsightsWidget({ bills = [], isLoading = false }: AIInsightsWidgetProps) {
+  const insights = useMemo(() => calculateInsights(bills), [bills]);
 
   return (
     <motion.div
@@ -24,14 +29,29 @@ export function AIInsightsWidget() {
           <p className="text-xs text-muted-foreground">Smart analysis of your bills</p>
         </div>
       </div>
-      <div className="space-y-3">
-        {insights.map((insight, i) => (
-          <div key={i} className="flex items-start gap-3 p-3 rounded-2xl bg-secondary/30">
-            <div className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${insight.type === 'warning' ? 'bg-status-pending' : 'bg-accent'}`} />
-            <p className="text-sm text-muted-foreground">{insight.text}</p>
-          </div>
-        ))}
-      </div>
+
+      {isLoading && bills.length === 0 ? (
+        <div className="space-y-3">
+          <div className="h-12 rounded-2xl bg-secondary/30 animate-pulse" />
+          <div className="h-12 rounded-2xl bg-secondary/30 animate-pulse" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {insights.map((insight) => (
+            <div
+              key={insight.id}
+              className="flex items-start gap-3 p-3 rounded-2xl bg-secondary/30"
+            >
+              <div
+                className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                  insight.type === 'warning' ? 'bg-status-pending' : 'bg-accent'
+                }`}
+              />
+              <p className="text-sm text-muted-foreground leading-relaxed">{insight.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
