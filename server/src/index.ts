@@ -130,6 +130,47 @@ app.get("/api/users/me", async (req, res) => {
   }
 });
 
+function getBootstrapAdminIds(): string[] {
+  return (process.env.ADMIN_CLERK_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+async function isUserAdmin(
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+
+  const adminIds = getBootstrapAdminIds();
+
+  if (adminIds.includes(userId)) {
+    return true;
+  }
+
+  const user = await User.findOne({ clerkUserId: userId })
+    .select("role")
+    .lean();
+  return user?.role === "admin";
+}
+
+async function requireAdminAuth(
+  req: express.Request,
+  res: express.Response,
+): Promise<string | null> {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required." });
+    return null;
+  }
+  const admin = await isUserAdmin(userId);
+  if (!admin) {
+    res.status(403).json({ error: "Admin access required." });
+    return null;
+  }
+  return userId;
+}
+
 app.get("/api/users/me/role", async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -138,12 +179,7 @@ app.get("/api/users/me/role", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
 
-    const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    const role = adminIds.includes(userId) ? "admin" : "user";
+    const role = (await isUserAdmin(userId)) ? "admin" : "user";
 
     const clerkUser = await clerkClient.users.getUser(userId);
     const email =
@@ -151,14 +187,18 @@ app.get("/api/users/me/role", async (req, res) => {
         (item) => item.id === clerkUser.primaryEmailAddressId,
       )?.emailAddress ?? "";
 
+    const rawDisplayName = [clerkUser.firstName, clerkUser.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const displayName = rawDisplayName ? rawDisplayName.slice(0, 120) : null;
+
     await User.findOneAndUpdate(
       { clerkUserId: userId },
       {
         $set: {
           email,
-          displayName: [clerkUser.firstName, clerkUser.lastName]
-            .filter(Boolean)
-            .join(" "),
+          displayName,
           avatarUrl: clerkUser.imageUrl,
           role,
         },
@@ -247,40 +287,252 @@ app.get("/api/site-settings", async (_req, res) => {
   }
 });
 
-async function isUserAdmin(userId: string | null | undefined): Promise<boolean> {
-  if (!userId) return false;
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
 
-  const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
+    let allClerkUsers: Array<{
+      id: string;
+      primaryEmailAddressId?: string | null;
+      emailAddresses?: Array<{ id: string; emailAddress: string }>;
+      createdAt?: number | string | Date;
+      lastSignInAt?: number | string | Date | null;
+    }> = [];
 
-  if (adminIds.includes(userId)) {
-    return true;
+    const requestedLimit = req.query.limit
+      ? Math.min(Number(req.query.limit), 500)
+      : 0;
+    const requestedOffset = req.query.offset
+      ? Math.max(Number(req.query.offset), 0)
+      : 0;
+
+    if (requestedLimit > 0) {
+      const page = await clerkClient.users.getUserList({
+        limit: Math.min(requestedLimit, 100),
+        offset: requestedOffset,
+        orderBy: "-created_at",
+      });
+      allClerkUsers = page.data as typeof allClerkUsers;
+    } else {
+      // Loop to fetch all users with pagination (up to 500 max safety limit)
+      let currentOffset = 0;
+      let hasMore = true;
+      while (hasMore && allClerkUsers.length < 500) {
+        const page = await clerkClient.users.getUserList({
+          limit: 100,
+          offset: currentOffset,
+          orderBy: "-created_at",
+        });
+        allClerkUsers.push(...(page.data as typeof allClerkUsers));
+        if (page.data.length < 100 || allClerkUsers.length >= page.totalCount) {
+          hasMore = false;
+        } else {
+          currentOffset += page.data.length;
+        }
+      }
+    }
+
+    const bootstrapIds = getBootstrapAdminIds();
+
+    const userIds = allClerkUsers.map((u) => u.id);
+    const dbUsers = await User.find({ clerkUserId: { $in: userIds } })
+      .select("clerkUserId role")
+      .lean();
+
+    const roleMap = new Map(dbUsers.map((u) => [u.clerkUserId, u.role]));
+
+    const users = allClerkUsers.map((u) => {
+      const primaryEmail =
+        u.emailAddresses?.find((item) => item.id === u.primaryEmailAddressId)
+          ?.emailAddress ||
+        u.emailAddresses?.[0]?.emailAddress ||
+        null;
+
+      const createdAtIso = u.createdAt
+        ? new Date(u.createdAt).toISOString()
+        : new Date().toISOString();
+      const lastSignInIso = u.lastSignInAt
+        ? new Date(u.lastSignInAt).toISOString()
+        : null;
+
+      const isBootstrapAdmin = bootstrapIds.includes(u.id);
+      const isAdmin =
+        isBootstrapAdmin || roleMap.get(u.id) === "admin";
+
+      return {
+        id: u.id,
+        email: primaryEmail,
+        created_at: createdAtIso,
+        last_sign_in_at: lastSignInIso,
+        is_admin: isAdmin,
+        is_bootstrap_admin: isBootstrapAdmin,
+      };
+    });
+
+    return res.status(200).json(users);
+  } catch (error) {
+    console.error("Failed to list admin users:", error);
+    return res.status(500).json({ error: "Failed to retrieve user list." });
   }
+});
 
-  const user = await User.findOne({ clerkUserId: userId })
-    .select("role")
-    .lean();
-  return user?.role === "admin";
-}
+app.post("/api/admin/users/:id/grant-admin", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
 
-async function requireAdminAuth(
-  req: express.Request,
-  res: express.Response,
-): Promise<string | null> {
-  const { userId } = getAuth(req);
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required." });
-    return null;
+    const targetUserId = req.params.id;
+    if (
+      !targetUserId ||
+      typeof targetUserId !== "string" ||
+      !targetUserId.trim()
+    ) {
+      return res.status(400).json({ error: "Target user ID is required." });
+    }
+
+    let clerkUser;
+    try {
+      clerkUser = await clerkClient.users.getUser(targetUserId);
+    } catch (err: unknown) {
+      const clerkErr = err as { status?: number };
+      if (clerkErr?.status === 404) {
+        return res
+          .status(404)
+          .json({ error: "User not found in identity provider." });
+      }
+      console.error("Clerk getUser error:", err);
+      return res.status(500).json({ error: "Failed to verify target user." });
+    }
+
+    if (!clerkUser) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const email =
+      clerkUser.emailAddresses?.find(
+        (item) => item.id === clerkUser.primaryEmailAddressId,
+      )?.emailAddress ||
+      clerkUser.emailAddresses?.[0]?.emailAddress ||
+      null;
+
+    const rawDisplayName = [clerkUser.firstName, clerkUser.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const displayName = rawDisplayName ? rawDisplayName.slice(0, 120) : null;
+
+    await User.findOneAndUpdate(
+      { clerkUserId: targetUserId },
+      {
+        $set: {
+          role: "admin",
+          email,
+          displayName,
+          avatarUrl: clerkUser.imageUrl || null,
+        },
+        $setOnInsert: { clerkUserId: targetUserId },
+      },
+      { upsert: true, new: true, runValidators: true },
+    );
+
+    return res.status(200).json({
+      message: "Admin privileges granted.",
+      userId: targetUserId,
+      is_admin: true,
+    });
+  } catch (error) {
+    console.error("Failed to grant admin privileges:", error);
+    return res.status(500).json({ error: "Failed to grant admin privileges." });
   }
-  const admin = await isUserAdmin(userId);
-  if (!admin) {
-    res.status(403).json({ error: "Admin access required." });
-    return null;
+});
+
+app.post("/api/admin/users/:id/revoke-admin", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const targetUserId = req.params.id;
+    if (
+      !targetUserId ||
+      typeof targetUserId !== "string" ||
+      !targetUserId.trim()
+    ) {
+      return res.status(400).json({ error: "Target user ID is required." });
+    }
+
+    // 1. Self-revocation prevention
+    if (targetUserId === adminUserId) {
+      return res
+        .status(400)
+        .json({ error: "Cannot revoke admin privileges from yourself." });
+    }
+
+    // 2. Bootstrap administrator protection
+    const bootstrapIds = getBootstrapAdminIds();
+
+    if (bootstrapIds.includes(targetUserId)) {
+      return res.status(400).json({
+        error:
+          "Cannot revoke admin privileges from an environment bootstrap admin.",
+      });
+    }
+
+    // 3. Verify target user exists in Clerk
+    try {
+      await clerkClient.users.getUser(targetUserId);
+    } catch (err: unknown) {
+      const clerkErr = err as { status?: number };
+      if (clerkErr?.status === 404) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      console.error("Clerk getUser error in revoke-admin:", err);
+      return res.status(500).json({ error: "Failed to verify target user." });
+    }
+
+    await User.findOneAndUpdate(
+      { clerkUserId: targetUserId },
+      { $set: { role: "user" } },
+    );
+
+    return res.status(200).json({
+      message: "Admin privileges revoked.",
+      userId: targetUserId,
+      is_admin: false,
+    });
+  } catch (error) {
+    console.error("Failed to revoke admin privileges:", error);
+    return res.status(500).json({ error: "Failed to revoke admin privileges." });
   }
-  return userId;
-}
+});
+
+app.get("/api/admin/summary", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const bootstrapIds = getBootstrapAdminIds();
+
+    const dbAdmins = await User.find({ role: "admin" })
+      .select("clerkUserId")
+      .lean();
+
+    const uniqueAdmins = new Set<string>([
+      ...bootstrapIds,
+      ...dbAdmins.map((u) => u.clerkUserId),
+    ]);
+
+    const pricingTiersCount = await PricingTier.countDocuments();
+
+    return res.status(200).json({
+      adminCount: uniqueAdmins.size,
+      pricingTiersCount,
+    });
+  } catch (error) {
+    console.error("Failed to load admin summary:", error);
+    return res.status(500).json({ error: "Failed to load admin summary." });
+  }
+});
 
 app.get("/api/pricing-tiers", async (req, res) => {
   try {
@@ -461,24 +713,8 @@ app.delete("/api/admin/pricing-tiers/:id", async (req, res) => {
 
 app.patch("/api/admin/branding", async (req, res) => {
   try {
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-      return res.status(401).json({
-        error: "Authentication required.",
-      });
-    }
-
-    const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    if (!adminIds.includes(userId)) {
-      return res.status(403).json({
-        error: "Admin access required.",
-      });
-    }
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
 
     const parsed = brandingSettingsSchema.safeParse(req.body);
 
@@ -543,20 +779,8 @@ const themeSettingsSchema = z.object({
 
 app.patch("/api/admin/site-settings", async (req, res) => {
   try {
-    const { userId } = getAuth(req);
-
-    if (!userId) {
-      return res.status(401).json({ error: "Authentication required." });
-    }
-
-    const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    if (!adminIds.includes(userId)) {
-      return res.status(403).json({ error: "Admin access required." });
-    }
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
 
     const parsed = themeSettingsSchema.safeParse(req.body);
 
@@ -594,24 +818,15 @@ app.patch("/api/admin/site-settings", async (req, res) => {
   }
 });
 
-app.post("/api/admin/branding/logo", (req, res, next) => {
-  const { userId } = getAuth(req);
-
-  if (!userId) {
-    return res.status(401).json({ error: "Authentication required." });
-  }
-
-  const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-
-  if (!adminIds.includes(userId)) {
-    return res.status(403).json({ error: "Admin access required." });
-  }
-
-  next();
-}, upload.single("logo"), async (req, res) => {
+app.post(
+  "/api/admin/branding/logo",
+  async (req, res, next) => {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+    next();
+  },
+  upload.single("logo"),
+  async (req, res) => {
   try {
     if (!isS3Configured()) {
       return res.status(503).json({
@@ -1378,4 +1593,13 @@ if (process.env.NODE_ENV !== "test") {
   void startServer();
 }
 
-export { app, mongoose, PricingTier, seedPricingTiersIfEmpty };
+export {
+  app,
+  mongoose,
+  PricingTier,
+  seedPricingTiersIfEmpty,
+  User,
+  isUserAdmin,
+  requireAdminAuth,
+  getBootstrapAdminIds,
+};

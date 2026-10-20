@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ interface AdminUser {
   created_at: string;
   last_sign_in_at: string | null;
   is_admin: boolean;
+  is_bootstrap_admin?: boolean;
 }
 
 export default function AdminUsers() {
@@ -25,14 +26,16 @@ export default function AdminUsers() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase.rpc('admin_list_users');
-    if (error) {
-      toast.error(error.message);
+    try {
+      const data = await apiRequest<AdminUser[]>('/api/admin/users');
+      setUsers(data ?? []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load users';
+      toast.error(msg);
       setUsers([]);
-    } else {
-      setUsers((data ?? []) as AdminUser[]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -41,15 +44,19 @@ export default function AdminUsers() {
 
   const toggleAdmin = async (u: AdminUser) => {
     setBusyId(u.id);
-    const fn = u.is_admin ? 'admin_revoke_admin' : 'admin_grant_admin';
-    const { error } = await supabase.rpc(fn, { _user_id: u.id });
-    if (error) {
-      toast.error(error.message);
-    } else {
+    const endpoint = u.is_admin
+      ? `/api/admin/users/${encodeURIComponent(u.id)}/revoke-admin`
+      : `/api/admin/users/${encodeURIComponent(u.id)}/grant-admin`;
+    try {
+      await apiRequest(endpoint, { method: 'POST' });
       toast.success(u.is_admin ? 'Admin revoked' : 'Admin granted');
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, is_admin: !x.is_admin } : x)));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update admin role';
+      toast.error(msg);
+    } finally {
+      setBusyId(null);
     }
-    setBusyId(null);
   };
 
   const filtered = users.filter(u =>
@@ -60,7 +67,10 @@ export default function AdminUsers() {
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-        <p className="text-muted-foreground mt-1">Manage admin access. {users.length} total.</p>
+        <p className="text-muted-foreground mt-1">
+          Manage admin access. {users.length} {users.length === 1 ? 'user' : 'users'} shown
+          {users.length >= 500 ? ' (capped at 500 most recent)' : ''}.
+        </p>
       </div>
 
       <div className="relative max-w-sm">
@@ -116,6 +126,9 @@ export default function AdminUsers() {
                       {u.is_admin ? (
                         <Badge variant="default" className="gap-1">
                           <ShieldCheck className="w-3 h-3" /> Admin
+                          {u.is_bootstrap_admin && (
+                            <span className="text-[10px] opacity-75 font-normal ml-0.5">(Bootstrap)</span>
+                          )}
                         </Badge>
                       ) : (
                         <Badge variant="secondary">User</Badge>
@@ -125,9 +138,15 @@ export default function AdminUsers() {
                       <Button
                         size="sm"
                         variant={u.is_admin ? 'outline' : 'default'}
-                        disabled={busyId === u.id || (u.is_admin && isMe)}
+                        disabled={busyId === u.id || (u.is_admin && (isMe || Boolean(u.is_bootstrap_admin)))}
                         onClick={() => toggleAdmin(u)}
-                        title={u.is_admin && isMe ? "You can't revoke your own admin" : undefined}
+                        title={
+                          u.is_admin && isMe
+                            ? "You can't revoke your own admin"
+                            : u.is_admin && u.is_bootstrap_admin
+                              ? "Environment bootstrap admins cannot be revoked via the UI"
+                              : undefined
+                        }
                       >
                         {busyId === u.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -147,7 +166,7 @@ export default function AdminUsers() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Note: requires <code className="text-foreground">db/admin_users_rpc.sql</code> to be applied in Supabase.
+        Admin roles are managed through the MERN backend and synchronized with Clerk and MongoDB.
       </p>
     </div>
   );
