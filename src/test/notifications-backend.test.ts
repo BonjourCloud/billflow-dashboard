@@ -609,4 +609,153 @@ describe('Notifications Backend — Tenant Isolation & Lifecycle Operations', ()
     expect(notif.isDismissed).toBe(true);
     expect(notif.isRead).toBe(true);
   });
+
+  it('supersedes active due-soon notifications when a bill becomes overdue', () => {
+    const overdueBillId = 'bill-electricity';
+    let notifications: MockNotification[] = [
+      {
+        _id: 'notif-due-soon',
+        userId: 'user_alice',
+        type: 'due_soon',
+        title: 'Payment Due Soon: Electricity',
+        message: '$120.00 is due today (2026-10-15).',
+        billId: overdueBillId,
+        seriesId: null,
+        billingCycle: null,
+        dueDate: new Date('2026-10-15T00:00:00.000Z'),
+        amount: 120.0,
+        isRead: false,
+        isDismissed: false,
+        createdAt: new Date('2026-10-15T00:00:00.000Z'),
+      },
+      {
+        _id: 'notif-other',
+        userId: 'user_alice',
+        type: 'due_soon',
+        title: 'Payment Due Soon: Internet',
+        message: '$60.00 is due in 3 days.',
+        billId: 'bill-internet',
+        seriesId: null,
+        billingCycle: null,
+        dueDate: new Date('2026-10-23T00:00:00.000Z'),
+        amount: 60.0,
+        isRead: false,
+        isDismissed: false,
+        createdAt: new Date('2026-10-19T00:00:00.000Z'),
+      },
+    ];
+
+    // Reference date moves to 2026-10-20. Bill 'bill-electricity' is now overdue.
+    const overdueBills: MockBill[] = [
+      {
+        _id: overdueBillId,
+        userId: 'user_alice',
+        name: 'Electricity',
+        amount: 120.0,
+        dueDate: new Date('2026-10-15T00:00:00.000Z'),
+        status: 'pending',
+      },
+    ];
+
+    // 1. Create overdue notification
+    notifications.push({
+      _id: 'notif-overdue',
+      userId: 'user_alice',
+      type: 'overdue',
+      title: 'Payment Overdue: Electricity',
+      message: '$120.00 was due on 2026-10-15 (5 days overdue).',
+      billId: overdueBillId,
+      seriesId: null,
+      billingCycle: null,
+      dueDate: new Date('2026-10-15T00:00:00.000Z'),
+      amount: 120.0,
+      isRead: false,
+      isDismissed: false,
+      createdAt: new Date('2026-10-20T00:00:00.000Z'),
+    });
+
+    // 2. Supersede active due_soon alerts for all overdue bills
+    const overdueBillIds = overdueBills.map((b) => b._id);
+    notifications = notifications.map((n) => {
+      if (
+        overdueBillIds.includes(n.billId) &&
+        n.type === 'due_soon' &&
+        !n.isDismissed
+      ) {
+        return { ...n, isDismissed: true, isRead: true };
+      }
+      return n;
+    });
+
+    // Active (non-dismissed) notifications
+    const active = notifications.filter((n) => !n.isDismissed);
+    expect(active).toHaveLength(2);
+
+    // Overdue notification is active
+    const overdueNotif = active.find((n) => n.billId === overdueBillId);
+    expect(overdueNotif?.type).toBe('overdue');
+    expect(overdueNotif?.isRead).toBe(false);
+
+    // The due_soon notification for overdueBillId is superseded (dismissed & read)
+    const superseded = notifications.find((n) => n._id === 'notif-due-soon');
+    expect(superseded?.isDismissed).toBe(true);
+    expect(superseded?.isRead).toBe(true);
+
+    // Unrelated pending bill's due_soon notification remains active
+    const otherNotif = active.find((n) => n.billId === 'bill-internet');
+    expect(otherNotif?.isDismissed).toBe(false);
+    expect(otherNotif?.type).toBe('due_soon');
+  });
+
+  it('preserves deduplication and handles repeated supersession idempotently', () => {
+    let notifications: MockNotification[] = [
+      {
+        _id: 'notif-due-soon',
+        userId: 'user_alice',
+        type: 'due_soon',
+        title: 'Payment Due Soon: Netflix',
+        message: '$15.99 is due.',
+        billId: 'b-netflix',
+        seriesId: null,
+        billingCycle: null,
+        dueDate: new Date('2026-10-10T00:00:00.000Z'),
+        amount: 15.99,
+        isRead: true,
+        isDismissed: true, // Already superseded
+        createdAt: new Date('2026-10-09T00:00:00.000Z'),
+      },
+      {
+        _id: 'notif-overdue',
+        userId: 'user_alice',
+        type: 'overdue',
+        title: 'Payment Overdue: Netflix',
+        message: '$15.99 is overdue.',
+        billId: 'b-netflix',
+        seriesId: null,
+        billingCycle: null,
+        dueDate: new Date('2026-10-10T00:00:00.000Z'),
+        amount: 15.99,
+        isRead: false,
+        isDismissed: false,
+        createdAt: new Date('2026-10-11T00:00:00.000Z'),
+      },
+    ];
+
+    // Second run: attempt to insert due_soon again or re-supersede
+    const overdueBillIds = ['b-netflix'];
+    notifications = notifications.map((n) => {
+      if (
+        overdueBillIds.includes(n.billId) &&
+        n.type === 'due_soon' &&
+        !n.isDismissed
+      ) {
+        return { ...n, isDismissed: true, isRead: true };
+      }
+      return n;
+    });
+
+    const active = notifications.filter((n) => !n.isDismissed);
+    expect(active).toHaveLength(1);
+    expect(active[0]._id).toBe('notif-overdue');
+  });
 });

@@ -16,6 +16,21 @@ export interface PricingTier {
   updated_at: string;
 }
 
+interface RawPricingTierRow {
+  id: string;
+  slug: string;
+  name: string;
+  price_monthly: number | string;
+  price_yearly: number | string;
+  billing_period: string;
+  cta_label: string;
+  is_highlighted: boolean;
+  is_visible: boolean;
+  sort_order: number;
+  features?: unknown;
+  updated_at: string;
+}
+
 export function usePricingTiers(opts?: { includeHidden?: boolean }) {
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,9 +42,9 @@ export function usePricingTiers(opts?: { includeHidden?: boolean }) {
     const { data, error } = await q;
     if (!error && data) {
       setTiers(
-        data.map((t: any) => ({
+        (data as unknown as RawPricingTierRow[]).map((t) => ({
           ...t,
-          features: Array.isArray(t.features) ? t.features : [],
+          features: Array.isArray(t.features) ? (t.features as string[]) : [],
           price_monthly: Number(t.price_monthly),
           price_yearly: Number(t.price_yearly),
         }))

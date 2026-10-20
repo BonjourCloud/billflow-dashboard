@@ -89,6 +89,7 @@ const Index = () => {
         bill={editingBill}
         onSave={store.addBill}
         onUpdate={store.updateBill}
+        isPending={store.isAdding || store.isUpdating}
       />
     </div>
   );

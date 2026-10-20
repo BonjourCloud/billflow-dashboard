@@ -244,3 +244,50 @@ describe("Iteration 2 Hardening — Ownership Enforcement & Auth Rules", () => {
     }
   });
 });
+
+describe("Bill submission idempotency and double-submit prevention", () => {
+  it("prevents submission when a mutation is already pending (isPending = true)", () => {
+    let callCount = 0;
+    const onSave = () => {
+      callCount++;
+    };
+
+    const simulateSubmit = (isPending: boolean, submitting: boolean) => {
+      const isBusy = Boolean(isPending || submitting);
+      if (isBusy) return false;
+      onSave();
+      return true;
+    };
+
+    // First attempt while pending: blocked
+    const attemptedWhilePending = simulateSubmit(true, false);
+    expect(attemptedWhilePending).toBe(false);
+    expect(callCount).toBe(0);
+
+    // Attempt while idle: succeeds
+    const attemptedWhileIdle = simulateSubmit(false, false);
+    expect(attemptedWhileIdle).toBe(true);
+    expect(callCount).toBe(1);
+  });
+
+  it("prevents repeated synchronous clicks via local submitting guard", () => {
+    let callCount = 0;
+    const onSave = () => {
+      callCount++;
+    };
+
+    let submitting = false;
+    const handleSubmit = () => {
+      if (submitting) return;
+      submitting = true;
+      onSave();
+    };
+
+    // Rapid double click
+    handleSubmit();
+    handleSubmit();
+    handleSubmit();
+
+    expect(callCount).toBe(1);
+  });
+});

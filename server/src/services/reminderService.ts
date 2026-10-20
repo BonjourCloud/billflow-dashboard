@@ -191,6 +191,27 @@ export async function generateRemindersForUser(
     }
   }
 
+  // 2b. Supersede open due-soon reminders for overdue bills:
+  // When a bill is overdue and has an overdue reminder, ensure its older
+  // active due_soon reminder is superseded (isDismissed: true, isRead: true)
+  // so the user does not see contradictory "due soon" and "overdue" alerts simultaneously.
+  // The record is preserved in MongoDB, maintaining the unique index { userId, billId, type }
+  // to prevent due_soon regeneration.
+  if (overdueBills.length > 0) {
+    const overdueBillIds = overdueBills.map((b) => b._id);
+    await Notification.updateMany(
+      {
+        userId,
+        billId: { $in: overdueBillIds },
+        type: "due_soon",
+        isDismissed: false,
+      },
+      {
+        $set: { isDismissed: true, isRead: true },
+      },
+    );
+  }
+
   // 3. Stale Notification Resolution:
   // If any bill has been marked 'paid', mark its open unread notifications as read
   // so the user does not receive outdated warnings.

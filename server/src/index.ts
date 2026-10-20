@@ -31,7 +31,7 @@ import {
 import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
-import { s3Client, s3Bucket } from "./config/s3.js";
+import { getS3Client, s3Bucket, isS3Configured } from "./config/s3.js";
 import multer from "multer";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const app = express();
@@ -63,17 +63,21 @@ const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY;
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
 if (!clerkPublishableKey || !clerkSecretKey) {
-  throw new Error(
-    "Missing CLERK_PUBLISHABLE_KEY or CLERK_SECRET_KEY in server/.env",
-  );
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error(
+      "Missing CLERK_PUBLISHABLE_KEY or CLERK_SECRET_KEY in server/.env",
+    );
+  }
 }
 
-app.use(
-  clerkMiddleware({
-    publishableKey: clerkPublishableKey,
-    secretKey: clerkSecretKey,
-  }),
-);
+if (clerkPublishableKey && clerkSecretKey) {
+  app.use(
+    clerkMiddleware({
+      publishableKey: clerkPublishableKey,
+      secretKey: clerkSecretKey,
+    }),
+  );
+}
 
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
@@ -196,12 +200,16 @@ app.get("/api/site-settings", async (_req, res) => {
           parsedUrl.hostname === expectedHost &&
           parsedUrl.pathname.startsWith("/branding/")
         ) {
-          const key = decodeURIComponent(parsedUrl.pathname.slice(1));
-          logoDisplayUrl = await getSignedUrl(
-            s3Client,
-            new GetObjectCommand({ Bucket: s3Bucket, Key: key }),
-            { expiresIn: 3600 },
-          );
+          if (isS3Configured()) {
+            const key = decodeURIComponent(parsedUrl.pathname.slice(1));
+            logoDisplayUrl = await getSignedUrl(
+              getS3Client(),
+              new GetObjectCommand({ Bucket: s3Bucket, Key: key }),
+              { expiresIn: 3600 },
+            );
+          } else {
+            logoDisplayUrl = null;
+          }
         }
       } catch (error) {
         console.error("Failed to create logo display URL:", error);
@@ -388,6 +396,12 @@ app.post("/api/admin/branding/logo", (req, res, next) => {
   next();
 }, upload.single("logo"), async (req, res) => {
   try {
+    if (!isS3Configured()) {
+      return res.status(503).json({
+        error: "AWS S3 storage is not configured. Cannot upload branding logo.",
+      });
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: "Please select a valid logo image." });
     }
@@ -401,7 +415,7 @@ app.post("/api/admin/branding/logo", (req, res, next) => {
     const extension = extensionByType[req.file.mimetype];
     const key = `branding/${randomUUID()}.${extension}`;
 
-    await s3Client.send(
+    await getS3Client().send(
       new PutObjectCommand({
         Bucket: s3Bucket,
         Key: key,
@@ -1027,11 +1041,95 @@ app.patch("/api/notifications/:id/dismiss", async (req, res) => {
   }
 });
 
-async function startServer(): Promise<void> {
+let server: ReturnType<typeof app.listen> | null = null;
+let isShuttingDown = false;
+
+export function setServerInstanceForTesting(
+  instance: ReturnType<typeof app.listen> | null,
+): void {
+  server = instance;
+  isShuttingDown = false;
+}
+
+export function resetShutdownStateForTesting(): void {
+  isShuttingDown = false;
+}
+
+export async function stopServer(options?: {
+  timeoutMs?: number;
+  exitOnTimeout?: boolean;
+}): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log("Shutting down BillFlow API gracefully...");
+
+  const timeoutMs = options?.timeoutMs ?? 10000;
+  // Reliable shutdown watchdog: do not unref the timer in production.
+  // In test environment, default to not exiting the process on timeout unless explicitly specified.
+  const shouldExitOnTimeout =
+    options?.exitOnTimeout ?? (process.env.NODE_ENV !== "test");
+
+  let forceTimeout: NodeJS.Timeout | null = null;
+  if (shouldExitOnTimeout) {
+    forceTimeout = setTimeout(() => {
+      console.error(
+        `Graceful shutdown timed out after ${timeoutMs / 1000}s, forcing exit.`,
+      );
+      process.exit(1);
+    }, timeoutMs);
+  }
+
+  let serverError: unknown = null;
+  let dbError: unknown = null;
+
+  try {
+    // 1. Attempt to close HTTP server to stop receiving new requests
+    if (server) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server!.close((err) => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+        console.log("HTTP server closed to new connections.");
+      } catch (err) {
+        console.error("Error closing HTTP server:", err);
+        serverError = err;
+      } finally {
+        server = null;
+      }
+    }
+
+    // 2. Always attempt MongoDB closure even if HTTP server closure fails
+    try {
+      if (mongoose.connection) {
+        await mongoose.connection.close(false);
+        console.log("MongoDB connection closed cleanly.");
+      }
+    } catch (err) {
+      console.error("Error closing MongoDB connection:", err);
+      dbError = err;
+    }
+
+    if (serverError || dbError) {
+      throw serverError || dbError;
+    }
+
+    console.log("Graceful shutdown complete.");
+  } finally {
+    if (forceTimeout) {
+      clearTimeout(forceTimeout);
+      forceTimeout = null;
+    }
+  }
+}
+
+export async function startServer(): Promise<void> {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`BillFlow API running at http://localhost:${PORT}`);
     });
   } catch {
@@ -1042,4 +1140,24 @@ async function startServer(): Promise<void> {
   }
 }
 
-void startServer();
+if (process.env.NODE_ENV !== "test") {
+  process.on("SIGTERM", () => {
+    void stopServer().then(() => {
+      process.exit(0);
+    }).catch(() => {
+      process.exit(1);
+    });
+  });
+
+  process.on("SIGINT", () => {
+    void stopServer().then(() => {
+      process.exit(0);
+    }).catch(() => {
+      process.exit(1);
+    });
+  });
+
+  void startServer();
+}
+
+export { app, mongoose };

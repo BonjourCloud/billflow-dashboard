@@ -14,6 +14,7 @@ interface BillDialogProps {
   bill?: Bill | null;
   onSave: (bill: Omit<Bill, '_id'>) => void;
   onUpdate: (id: string, updates: Partial<Bill> & { updateScope?: 'this' | 'future' }) => void;
+  isPending?: boolean;
 }
 
 function getOrdinalSuffix(n: number): string {
@@ -22,7 +23,7 @@ function getOrdinalSuffix(n: number): string {
   return s[(v - 20) % 10] || s[v] || s[0];
 }
 
-export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillDialogProps) {
+export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPending = false }: BillDialogProps) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -31,6 +32,9 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
   const [recurrenceType, setRecurrenceType] = useState<'one_time' | 'recurring'>('one_time');
   const [updateScope, setUpdateScope] = useState<'this' | 'future'>('this');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const isBusy = Boolean(isPending || submitting);
 
   useEffect(() => {
     if (bill) {
@@ -52,6 +56,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
       setUpdateScope('this');
     }
     setErrors({});
+    setSubmitting(false);
   }, [bill, open]);
 
   const recurringDay = dueDate ? parseInt(dueDate.split('-')[2], 10) : null;
@@ -84,7 +89,9 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBusy) return;
     if (!validate()) return;
+    setSubmitting(true);
 
     const isRec = recurrenceType === 'recurring';
     const data: Omit<Bill, '_id'> & { recurringDay?: number; updateScope?: 'this' | 'future' } = {
@@ -283,13 +290,24 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate }: BillD
             <Button
               type="button"
               variant="outline"
+              disabled={isBusy}
               onClick={() => onOpenChange(false)}
               className="active:scale-95 transition-transform"
             >
               Cancel
             </Button>
-            <Button type="submit" className="active:scale-95 transition-transform">
-              {bill ? 'Update' : 'Add'} Bill
+            <Button
+              type="submit"
+              disabled={isBusy}
+              className="active:scale-95 transition-transform"
+            >
+              {isBusy
+                ? bill
+                  ? 'Updating…'
+                  : 'Adding…'
+                : bill
+                  ? 'Update Bill'
+                  : 'Add Bill'}
             </Button>
           </div>
         </form>
