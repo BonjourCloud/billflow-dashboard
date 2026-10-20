@@ -11,6 +11,8 @@ import {
   isValidSeriesId,
 } from "./models/RecurringSeries.js";
 import { Notification, isValidNotificationId } from "./models/Notification.js";
+import { Payment, paymentCreateSchema, isValidPaymentId } from "./models/Payment.js";
+import { BillNote, noteCreateSchema } from "./models/BillNote.js";
 import {
   generateRemindersForUser,
   markNotificationRead,
@@ -1138,6 +1140,232 @@ app.delete("/api/bills/:id", async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// Bill Payments Endpoints
+// ──────────────────────────────────────────────
+
+// GET /api/bills/:id/payments — get payment history for a bill (owner check)
+app.get("/api/bills/:id/payments", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOne({
+      _id: req.params.id,
+      userId,
+    }).lean();
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    const payments = await Payment.find({
+      billId: req.params.id,
+      userId,
+    })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(payments);
+  } catch (error) {
+    console.error("Failed to list payments:", error);
+    return res.status(500).json({ error: "Failed to list payments." });
+  }
+});
+
+// POST /api/bills/:id/payments — record a payment for a bill (owner check)
+app.post("/api/bills/:id/payments", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOne({
+      _id: req.params.id,
+      userId,
+    });
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    const parsed = paymentCreateSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid payment data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    // Duplicate submission guard: check if an identical payment was recorded within the last 4 seconds
+    const fourSecondsAgo = new Date(Date.now() - 4000);
+    const recentDuplicate = await Payment.findOne({
+      userId,
+      billId: bill._id,
+      amount: parsed.data.amount,
+      method: parsed.data.method,
+      createdAt: { $gte: fourSecondsAgo },
+    });
+
+    if (recentDuplicate) {
+      return res.status(409).json({
+        error:
+          "Duplicate payment submission detected. Please wait a moment before trying again.",
+      });
+    }
+
+    const payment = await Payment.create({
+      userId,
+      billId: bill._id,
+      amount: parsed.data.amount,
+      paymentDate: parsed.data.paymentDate,
+      method: parsed.data.method,
+      status: parsed.data.status ?? "completed",
+      reference: parsed.data.reference ?? null,
+      notes: parsed.data.notes ?? null,
+    });
+
+    // Update bill status if completed payments cover the full bill amount.
+    // Partial payments must NOT mark the bill as paid.
+    if (payment.status === "completed") {
+      const paymentsAgg = await Payment.aggregate([
+        {
+          $match: {
+            billId: bill._id,
+            userId,
+            status: "completed",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalPaid: { $sum: "$amount" },
+          },
+        },
+      ]);
+
+      const totalPaid = paymentsAgg[0]?.totalPaid ?? 0;
+
+      // Allow 0.001 epsilon for currency floating-point comparison
+      if (totalPaid >= bill.amount - 0.001) {
+        if (bill.status !== "paid") {
+          bill.status = "paid";
+          await bill.save();
+
+          // Mark any active unread notifications for this bill as read
+          await Notification.updateMany(
+            { userId, billId: bill._id, isRead: false },
+            { $set: { isRead: true } },
+          );
+        }
+      }
+    }
+
+    return res.status(201).json(payment.toObject());
+  } catch (error) {
+    console.error("Failed to record payment:", error);
+    return res.status(500).json({ error: "Failed to record payment." });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Bill Notes Endpoints
+// ──────────────────────────────────────────────
+
+// GET /api/bills/:id/notes — get notes for a bill (owner check)
+app.get("/api/bills/:id/notes", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOne({
+      _id: req.params.id,
+      userId,
+    }).lean();
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    const notes = await BillNote.find({
+      billId: req.params.id,
+      userId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(notes);
+  } catch (error) {
+    console.error("Failed to list bill notes:", error);
+    return res.status(500).json({ error: "Failed to list bill notes." });
+  }
+});
+
+// POST /api/bills/:id/notes — add a note for a bill (owner check)
+app.post("/api/bills/:id/notes", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidBillId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const bill = await Bill.findOne({
+      _id: req.params.id,
+      userId,
+    });
+
+    if (!bill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    const parsed = noteCreateSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid note data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const note = await BillNote.create({
+      userId,
+      billId: bill._id,
+      text: parsed.data.text,
+    });
+
+    return res.status(201).json(note.toObject());
+  } catch (error) {
+    console.error("Failed to create bill note:", error);
+    return res.status(500).json({ error: "Failed to create bill note." });
+  }
+});
+
+// ──────────────────────────────────────────────
 // Subscriptions (RecurringSeries) Endpoints
 // ──────────────────────────────────────────────
 
@@ -1602,4 +1830,8 @@ export {
   isUserAdmin,
   requireAdminAuth,
   getBootstrapAdminIds,
+  Payment,
+  paymentCreateSchema,
+  BillNote,
+  noteCreateSchema,
 };
