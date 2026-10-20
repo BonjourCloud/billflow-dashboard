@@ -12,6 +12,8 @@ import Login from "./pages/Login";
 import Index from "./pages/Index";
 import BillDetail from "./pages/BillDetail";
 import Subscriptions from "./pages/Subscriptions";
+import Installments from "./pages/Installments";
+import InstallmentDetail from "./pages/InstallmentDetail";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -34,6 +36,8 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/installments" element={<ProtectedRoute><Installments /></ProtectedRoute>} />
+              <Route path="/installments/:id" element={<ProtectedRoute><InstallmentDetail /></ProtectedRoute>} />
               <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
               <Route path="/bill/:id" element={<ProtectedRoute><BillDetail /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>

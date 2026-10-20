@@ -39,6 +39,9 @@ export function DashboardHeader() {
   const isBillsActive =
     location.pathname === '/dashboard' ||
     location.pathname.startsWith('/bill/');
+  const isInstallmentsActive =
+    location.pathname === '/installments' ||
+    location.pathname.startsWith('/installments');
   const isSubsActive = location.pathname === '/subscriptions';
 
   return (
@@ -69,6 +72,17 @@ export function DashboardHeader() {
           }`}
         >
           Bills
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/installments')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            isInstallmentsActive
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Installments
         </button>
         <button
           type="button"

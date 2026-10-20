@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowRight,
   CreditCard,
   Wallet,
   Send,
@@ -18,8 +19,10 @@ import {
   Banknote,
   Smartphone,
   Plus,
+  Layers,
 } from 'lucide-react';
 import { Bill } from '@/data/bills';
+import { InstallmentPlanDetailResponse } from '@/data/installments';
 import {
   PaymentRecord,
   BillNote,
@@ -96,6 +99,15 @@ const BillDetail = () => {
     enabled: !!id,
   });
 
+  const { data: parentPlanData } = useQuery<InstallmentPlanDetailResponse>({
+    queryKey: ['installments', bill?.planId],
+    queryFn: () =>
+      apiRequest<InstallmentPlanDetailResponse>(
+        `/api/installments/${bill!.planId}`,
+      ),
+    enabled: Boolean(bill?.planId),
+  });
+
   const [newNote, setNewNote] = useState('');
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -138,6 +150,10 @@ const BillDetail = () => {
       queryClient.invalidateQueries({ queryKey: ['bills', id] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      if (bill?.planId) {
+        queryClient.invalidateQueries({ queryKey: ['installments'] });
+        queryClient.invalidateQueries({ queryKey: ['installments', bill.planId] });
+      }
       setIsPaymentDialogOpen(false);
       setPaymentReference('');
       setPaymentNotes('');
@@ -156,6 +172,10 @@ const BillDetail = () => {
         queryClient.invalidateQueries({ queryKey: ['bills', id] });
         queryClient.invalidateQueries({ queryKey: ['bills'] });
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        if (bill?.planId) {
+          queryClient.invalidateQueries({ queryKey: ['installments'] });
+          queryClient.invalidateQueries({ queryKey: ['installments', bill.planId] });
+        }
         setIsPaymentDialogOpen(false);
         setPaymentReference('');
         setPaymentNotes('');
@@ -292,10 +312,31 @@ const BillDetail = () => {
             <h1 className="text-2xl font-bold">{bill.name}</h1>
             <p className="text-sm text-muted-foreground capitalize">
               {bill.category} •{' '}
-              {bill.recurrenceType === 'recurring' || bill.isSubscription
+              {bill.planId && bill.installmentNumber && bill.totalInstallments
+                ? `Installment ${bill.installmentNumber} of ${bill.totalInstallments}`
+                : bill.recurrenceType === 'recurring' || bill.isSubscription
                 ? `Monthly Recurring${bill.billingCycle ? ` (${bill.billingCycle})` : ''}`
                 : 'One-time'}
             </p>
+            {bill.planId && (
+              <div className="mt-2">
+                <Link
+                  to={`/installments/${bill.planId}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all group"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>
+                    {bill.installmentNumber && bill.totalInstallments
+                      ? `Installment ${bill.installmentNumber} of ${bill.totalInstallments}`
+                      : 'Installment Bill'}
+                    {parentPlanData?.plan?.name
+                      ? ` • Part of ${parentPlanData.plan.name}`
+                      : ' • View Installment Plan'}
+                  </span>
+                  <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              </div>
+            )}
           </div>
           <span className={`text-xs font-medium px-3 py-1.5 rounded-full border ${statusCls} capitalize`}>{bill.status}</span>
         </motion.div>
