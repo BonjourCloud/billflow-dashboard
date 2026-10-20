@@ -144,6 +144,31 @@ describe("Phase 3A — Payment Schema Validation", () => {
     expect(isValidPaymentId("invalid-id")).toBe(false);
     expect(isValidPaymentId("")).toBe(false);
   });
+
+  it("accepts valid idempotency keys and rejects invalid ones", () => {
+    const validWithKey = paymentCreateSchema.safeParse({
+      ...validBasePayment,
+      idempotencyKey: "idem_abc123-def456-ghi789",
+    });
+    expect(validWithKey.success).toBe(true);
+    if (validWithKey.success) {
+      expect(validWithKey.data.idempotencyKey).toBe("idem_abc123-def456-ghi789");
+    }
+
+    // null allowed
+    const validNullKey = paymentCreateSchema.safeParse({
+      ...validBasePayment,
+      idempotencyKey: null,
+    });
+    expect(validNullKey.success).toBe(true);
+
+    // Exceeding 128 characters rejected
+    const tooLongKey = paymentCreateSchema.safeParse({
+      ...validBasePayment,
+      idempotencyKey: "k".repeat(129),
+    });
+    expect(tooLongKey.success).toBe(false);
+  });
 });
 
 describe("Phase 3A — Bill Note Schema Validation", () => {
@@ -188,6 +213,7 @@ interface MockPayment {
   status: "completed" | "failed" | "refunded";
   reference?: string | null;
   notes?: string | null;
+  idempotencyKey?: string | null;
   createdAt: Date;
 }
 
@@ -289,6 +315,19 @@ describe("Phase 3A — Simulated Route Handlers: Authentication & Ownership", ()
       };
     }
 
+    // Idempotency key uniqueness check (MongoDB E11000 duplicate key emulation)
+    if (parsed.data.idempotencyKey) {
+      const existingWithKey = paymentsDb.find(
+        (p) => p.userId === callerUserId && p.idempotencyKey === parsed.data.idempotencyKey,
+      );
+      if (existingWithKey) {
+        return {
+          status: 409,
+          error: "Duplicate payment submission detected for this request.",
+        };
+      }
+    }
+
     const newPayment: MockPayment = {
       _id: "507f1f77bcf86cd799439099",
       userId: callerUserId,
@@ -299,6 +338,7 @@ describe("Phase 3A — Simulated Route Handlers: Authentication & Ownership", ()
       status: parsed.data.status ?? "completed",
       reference: parsed.data.reference ?? null,
       notes: parsed.data.notes ?? null,
+      idempotencyKey: parsed.data.idempotencyKey ?? null,
       createdAt: currentTime,
     };
     paymentsDb.push(newPayment);
@@ -511,6 +551,110 @@ describe("Phase 3A — Simulated Route Handlers: Authentication & Ownership", ()
     // Most recent payment date first
     expect((listRes.data as MockPayment[])[0].amount).toBe(70);
     expect((listRes.data as MockPayment[])[1].amount).toBe(30);
+  });
+
+  it("rejects duplicate payment with identical idempotency key with 409 even after deduplication window", () => {
+    resetDatabases();
+    const key = "client-txn-uuid-12345";
+    const paymentPayload = {
+      amount: 50,
+      paymentDate: "2026-10-20",
+      method: "debit_card",
+      idempotencyKey: key,
+    };
+
+    const firstRes = simulateCreatePayment(USER_ALICE, BILL_ALICE, paymentPayload, new Date(1000));
+    expect(firstRes.status).toBe(201);
+    expect(paymentsDb).toHaveLength(1);
+
+    // Attempt retry 10 seconds later (well past the 4-second deduplication window) with the SAME idempotency key
+    const retryRes = simulateCreatePayment(
+      USER_ALICE,
+      BILL_ALICE,
+      paymentPayload,
+      new Date(11000),
+    );
+    expect(retryRes.status).toBe(409);
+    expect(retryRes.error).toMatch(/Duplicate payment submission detected/);
+    expect(paymentsDb).toHaveLength(1);
+
+    // Genuinely new payment with different idempotency key succeeds
+    const nextPaymentRes = simulateCreatePayment(
+      USER_ALICE,
+      BILL_ALICE,
+      {
+        ...paymentPayload,
+        idempotencyKey: "client-txn-uuid-67890",
+      },
+      new Date(12000),
+    );
+    expect(nextPaymentRes.status).toBe(201);
+    expect(paymentsDb).toHaveLength(2);
+  });
+
+  it("transitions bill status to paid when payment exceeds the bill amount (overpayment)", () => {
+    resetDatabases();
+    const aliceBill = billsDb.find((b) => b._id === BILL_ALICE)!;
+    expect(aliceBill.status).toBe("pending");
+
+    // Overpayment: paying $120 on a $100 bill
+    const overpaymentRes = simulateCreatePayment(USER_ALICE, BILL_ALICE, {
+      amount: 120,
+      paymentDate: "2026-10-20",
+      method: "credit_card",
+    });
+    expect(overpaymentRes.status).toBe(201);
+    expect(aliceBill.status).toBe("paid");
+  });
+
+  it("transitions an overdue bill to paid upon receiving full payment", () => {
+    resetDatabases();
+    const aliceBill = billsDb.find((b) => b._id === BILL_ALICE)!;
+    aliceBill.status = "overdue";
+
+    const res = simulateCreatePayment(USER_ALICE, BILL_ALICE, {
+      amount: 100,
+      paymentDate: "2026-10-20",
+      method: "upi",
+    });
+    expect(res.status).toBe(201);
+    expect(aliceBill.status).toBe("paid");
+  });
+
+  it("does not mark bill as paid when payment status is failed or refunded", () => {
+    resetDatabases();
+    const aliceBill = billsDb.find((b) => b._id === BILL_ALICE)!;
+    expect(aliceBill.status).toBe("pending");
+
+    // Failed payment for the full amount
+    const failedRes = simulateCreatePayment(
+      USER_ALICE,
+      BILL_ALICE,
+      {
+        amount: 100,
+        paymentDate: "2026-10-20",
+        method: "credit_card",
+        status: "failed",
+      },
+      new Date(1000),
+    );
+    expect(failedRes.status).toBe(201);
+    expect(aliceBill.status).toBe("pending"); // MUST REMAIN PENDING
+
+    // Refunded payment for the full amount
+    const refundedRes = simulateCreatePayment(
+      USER_ALICE,
+      BILL_ALICE,
+      {
+        amount: 100,
+        paymentDate: "2026-10-20",
+        method: "credit_card",
+        status: "refunded",
+      },
+      new Date(10000),
+    );
+    expect(refundedRes.status).toBe(201);
+    expect(aliceBill.status).toBe("pending"); // MUST REMAIN PENDING
   });
 
   it("supports persistent bill notes with ownership isolation", () => {

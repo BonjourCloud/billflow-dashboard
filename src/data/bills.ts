@@ -13,6 +13,9 @@ export interface Bill {
   seriesId?: string | null;
   billingCycle?: string | null;
   recurringDay?: number;
+  planId?: string | null;
+  installmentNumber?: number | null;
+  totalInstallments?: number | null;
 }
 
 export const CATEGORIES: BillCategory[] = ['utilities', 'entertainment', 'software', 'finance', 'insurance', 'housing'];

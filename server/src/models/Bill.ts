@@ -67,6 +67,20 @@ const billSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InstallmentPlan",
+      default: null,
+      index: true,
+    },
+    installmentNumber: {
+      type: Number,
+      default: null,
+    },
+    totalInstallments: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -81,6 +95,17 @@ billSchema.index(
     partialFilterExpression: {
       seriesId: { $type: "objectId" },
       billingCycle: { $type: "string" },
+    },
+  },
+);
+
+billSchema.index(
+  { planId: 1, installmentNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      planId: { $type: "objectId" },
+      installmentNumber: { $type: "number" },
     },
   },
 );

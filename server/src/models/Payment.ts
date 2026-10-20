@@ -50,6 +50,13 @@ export const paymentCreateSchema = z
       .max(500, "Notes must not exceed 500 characters.")
       .optional()
       .nullable(),
+    idempotencyKey: z
+      .string()
+      .trim()
+      .min(1, "Idempotency key must not be empty.")
+      .max(128, "Idempotency key must not exceed 128 characters.")
+      .optional()
+      .nullable(),
   })
   .strict();
 
@@ -108,6 +115,12 @@ const paymentSchema = new mongoose.Schema(
       maxlength: 500,
       default: null,
     },
+    idempotencyKey: {
+      type: String,
+      trim: true,
+      maxlength: 128,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -117,6 +130,17 @@ const paymentSchema = new mongoose.Schema(
 
 // Query index for retrieving bill payments sorted by payment date
 paymentSchema.index({ userId: 1, billId: 1, paymentDate: -1, createdAt: -1 });
+
+// Unique sparse partial index on idempotencyKey per user
+paymentSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      idempotencyKey: { $type: "string" },
+    },
+  },
+);
 
 export type PaymentDocument = InferSchemaType<typeof paymentSchema>;
 

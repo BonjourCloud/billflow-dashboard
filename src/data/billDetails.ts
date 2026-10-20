@@ -27,6 +27,7 @@ export interface PaymentRecord {
   status: PaymentStatus;
   reference?: string | null;
   notes?: string | null;
+  idempotencyKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

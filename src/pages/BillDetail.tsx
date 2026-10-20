@@ -103,6 +103,7 @@ const BillDetail = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
   const [paymentFormError, setPaymentFormError] = useState<string | null>(null);
 
   const totalPaid = useMemo(
@@ -125,6 +126,7 @@ const BillDetail = () => {
       method: PaymentMethod;
       reference?: string | null;
       notes?: string | null;
+      idempotencyKey?: string | null;
     }) =>
       apiRequest<PaymentRecord>(`/api/bills/${id}/payments`, {
         method: 'POST',
@@ -139,11 +141,30 @@ const BillDetail = () => {
       setIsPaymentDialogOpen(false);
       setPaymentReference('');
       setPaymentNotes('');
+      setPaymentIdempotencyKey('');
       setPaymentFormError(null);
     },
     onError: (err: Error) => {
-      setPaymentFormError(err.message || 'Failed to record payment');
-      toast.error(err.message || 'Failed to record payment');
+      const isDuplicate =
+        err.message?.includes('Duplicate payment submission detected') ||
+        err.message?.includes('409');
+
+      if (isDuplicate) {
+        // Payment was already recorded (e.g. prior attempt succeeded before a network timeout or duplicate retry)
+        toast.info('This payment was already recorded.');
+        queryClient.invalidateQueries({ queryKey: ['payments', id] });
+        queryClient.invalidateQueries({ queryKey: ['bills', id] });
+        queryClient.invalidateQueries({ queryKey: ['bills'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        setIsPaymentDialogOpen(false);
+        setPaymentReference('');
+        setPaymentNotes('');
+        setPaymentIdempotencyKey('');
+        setPaymentFormError(null);
+      } else {
+        setPaymentFormError(err.message || 'Failed to record payment');
+        toast.error(err.message || 'Failed to record payment');
+      }
     },
   });
 
@@ -171,6 +192,7 @@ const BillDetail = () => {
     setPaymentMethod('credit_card');
     setPaymentReference('');
     setPaymentNotes('');
+    setPaymentIdempotencyKey(crypto.randomUUID());
     setPaymentFormError(null);
     setIsPaymentDialogOpen(true);
   };
@@ -197,6 +219,7 @@ const BillDetail = () => {
       method: paymentMethod,
       reference: paymentReference.trim() || null,
       notes: paymentNotes.trim() || null,
+      idempotencyKey: paymentIdempotencyKey || null,
     });
   };
 

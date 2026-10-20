@@ -18,7 +18,15 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   dismissNotification,
+  cleanUpNotificationsForBills,
 } from "./services/reminderService.js";
+import {
+  InstallmentPlan,
+  calculateInstallmentPlanTotals,
+  installmentPlanCreateSchema,
+  installmentPlanUpdateSchema,
+  isValidPlanId,
+} from "./models/InstallmentPlan.js";
 import {
   generateDueOccurrencesForUser,
   createRecurringSeriesWithOccurrences,
@@ -29,6 +37,7 @@ import {
   deleteRecurringSeriesDirectly,
   subscriptionCreateSchema,
   subscriptionUpdateSchema,
+  calculateOccurrenceDueDate,
 } from "./services/recurrenceService.js";
 import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -1069,6 +1078,18 @@ app.patch("/api/bills/:id", async (req, res) => {
       return res.status(400).json({ error: "Invalid bill ID format." });
     }
 
+    const targetBill = await Bill.findOne({ _id: req.params.id, userId });
+    if (!targetBill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    if (targetBill.planId) {
+      return res.status(400).json({
+        error:
+          "Individual installment bills cannot be directly modified. Manage the parent installment plan instead.",
+      });
+    }
+
     const parsed = billUpdateSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -1116,6 +1137,18 @@ app.delete("/api/bills/:id", async (req, res) => {
 
     if (!isValidBillId(req.params.id)) {
       return res.status(400).json({ error: "Invalid bill ID format." });
+    }
+
+    const targetBill = await Bill.findOne({ _id: req.params.id, userId });
+    if (!targetBill) {
+      return res.status(404).json({ error: "Bill not found." });
+    }
+
+    if (targetBill.planId) {
+      return res.status(400).json({
+        error:
+          "Individual installment bills cannot be deleted directly. Cancel the installment plan to clean up unpaid installments.",
+      });
     }
 
     const rawScope = req.query.scope;
@@ -1179,6 +1212,54 @@ app.get("/api/bills/:id/payments", async (req, res) => {
   }
 });
 
+// Helper to sync parent InstallmentPlan balance and completion status
+async function syncInstallmentPlanBalance(
+  userId: string,
+  planId: mongoose.Types.ObjectId | string,
+): Promise<void> {
+  const plan = await InstallmentPlan.findOne({ _id: planId, userId });
+  if (!plan) return;
+
+  const planBills = await Bill.find({ planId: plan._id, userId }).select("_id").lean();
+  const billIds = planBills.map((b) => b._id);
+
+  const paymentsAgg = await Payment.aggregate([
+    {
+      $match: {
+        billId: { $in: billIds },
+        userId,
+        status: "completed",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalPaid: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const totalPaid = Math.round((paymentsAgg[0]?.totalPaid ?? 0) * 100) / 100;
+  const remainingBalance = Math.max(
+    0,
+    Math.round((plan.scheduledTotal - totalPaid) * 100) / 100,
+  );
+  const isCompleted = remainingBalance <= 0.001;
+
+  await InstallmentPlan.updateOne(
+    { _id: plan._id, userId },
+    {
+      $set: {
+        totalPaid,
+        remainingBalance,
+        ...(isCompleted && plan.status !== "cancelled"
+          ? { status: "completed" }
+          : {}),
+      },
+    },
+  );
+}
+
 // POST /api/bills/:id/payments — record a payment for a bill (owner check)
 app.post("/api/bills/:id/payments", async (req, res) => {
   try {
@@ -1227,16 +1308,28 @@ app.post("/api/bills/:id/payments", async (req, res) => {
       });
     }
 
-    const payment = await Payment.create({
-      userId,
-      billId: bill._id,
-      amount: parsed.data.amount,
-      paymentDate: parsed.data.paymentDate,
-      method: parsed.data.method,
-      status: parsed.data.status ?? "completed",
-      reference: parsed.data.reference ?? null,
-      notes: parsed.data.notes ?? null,
-    });
+    let payment;
+    try {
+      payment = await Payment.create({
+        userId,
+        billId: bill._id,
+        amount: parsed.data.amount,
+        paymentDate: parsed.data.paymentDate,
+        method: parsed.data.method,
+        status: parsed.data.status ?? "completed",
+        reference: parsed.data.reference ?? null,
+        notes: parsed.data.notes ?? null,
+        idempotencyKey: parsed.data.idempotencyKey ?? null,
+      });
+    } catch (err: unknown) {
+      const mongoErr = err as { code?: number };
+      if (mongoErr?.code === 11000) {
+        return res.status(409).json({
+          error: "Duplicate payment submission detected for this request.",
+        });
+      }
+      throw err;
+    }
 
     // Update bill status if completed payments cover the full bill amount.
     // Partial payments must NOT mark the bill as paid.
@@ -1261,16 +1354,23 @@ app.post("/api/bills/:id/payments", async (req, res) => {
 
       // Allow 0.001 epsilon for currency floating-point comparison
       if (totalPaid >= bill.amount - 0.001) {
-        if (bill.status !== "paid") {
-          bill.status = "paid";
-          await bill.save();
+        const updateResult = await Bill.updateOne(
+          { _id: bill._id, userId, status: { $ne: "paid" } },
+          { $set: { status: "paid" } },
+        );
 
+        if (updateResult.modifiedCount > 0) {
           // Mark any active unread notifications for this bill as read
           await Notification.updateMany(
             { userId, billId: bill._id, isRead: false },
             { $set: { isRead: true } },
           );
         }
+      }
+
+      // If this bill belongs to an installment plan, sync the plan balance
+      if (bill.planId) {
+        await syncInstallmentPlanBalance(userId, bill.planId);
       }
     }
 
@@ -1362,6 +1462,395 @@ app.post("/api/bills/:id/notes", async (req, res) => {
   } catch (error) {
     console.error("Failed to create bill note:", error);
     return res.status(500).json({ error: "Failed to create bill note." });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Installment Plans (EMI) Endpoints
+// ──────────────────────────────────────────────
+
+// POST /api/installments — create an installment plan and its finite schedule
+app.post("/api/installments", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = installmentPlanCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid installment plan data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const anchorDay =
+      parsed.data.recurringDay ?? parsed.data.startDate.getUTCDate();
+
+    const totals = calculateInstallmentPlanTotals({
+      principalAmount: parsed.data.principalAmount,
+      downPayment: parsed.data.downPayment,
+      totalInstallments: parsed.data.totalInstallments,
+      interestRate: parsed.data.interestRate,
+    });
+
+    const startYear = parsed.data.startDate.getUTCFullYear();
+    const startMonth = parsed.data.startDate.getUTCMonth();
+
+    // Generate the finite schedule template of N installment Bill documents
+    const installmentBillsData = [];
+    for (let k = 1; k <= parsed.data.totalInstallments; k++) {
+      const monthOffset = k - 1;
+      const currentMonthTotal = startMonth + monthOffset;
+      const targetYear = startYear + Math.floor(currentMonthTotal / 12);
+      const targetMonthIndex = currentMonthTotal % 12;
+
+      const dueDate = calculateOccurrenceDueDate(
+        anchorDay,
+        targetYear,
+        targetMonthIndex,
+      );
+
+      // Adjust rounding difference on the final installment so sum equals scheduledTotal exact
+      const isFinal = k === parsed.data.totalInstallments;
+      const amount = isFinal
+        ? Math.round(
+            (totals.baseInstallmentAmount + totals.roundingDifference) * 100,
+          ) / 100
+        : totals.baseInstallmentAmount;
+
+      installmentBillsData.push({
+        userId,
+        name: `${parsed.data.name} (${k}/${parsed.data.totalInstallments})`,
+        amount,
+        dueDate,
+        status: "pending" as const,
+        category: parsed.data.category ?? "finance",
+        isSubscription: false,
+        recurrenceType: "one_time" as const,
+        installmentNumber: k,
+        totalInstallments: parsed.data.totalInstallments,
+      });
+    }
+
+    const planData = {
+      userId,
+      name: parsed.data.name,
+      planType: parsed.data.planType ?? "other",
+      category: parsed.data.category ?? "finance",
+      principalAmount: parsed.data.principalAmount,
+      downPayment: parsed.data.downPayment ?? 0,
+      financedAmount: totals.financedAmount,
+      totalInstallments: parsed.data.totalInstallments,
+      interestRate: parsed.data.interestRate ?? 0,
+      totalInterest: totals.totalInterest,
+      scheduledTotal: totals.scheduledTotal,
+      installmentAmount: totals.baseInstallmentAmount,
+      startDate: parsed.data.startDate,
+      recurringDay: anchorDay,
+      totalPaid: 0,
+      remainingBalance: totals.scheduledTotal,
+      status: "active" as const,
+      idempotencyKey: parsed.data.idempotencyKey ?? null,
+    };
+
+    let session: mongoose.ClientSession | null = null;
+    let createdPlan: InstanceType<typeof InstallmentPlan> | null = null;
+    let insertedBills: unknown[] | null = null;
+
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+    } catch {
+      session = null;
+    }
+
+    if (session) {
+      try {
+        const plan = new InstallmentPlan(planData);
+        await plan.save({ session });
+
+        const billsToInsert = installmentBillsData.map((b) => ({
+          ...b,
+          planId: plan._id,
+        }));
+
+        const bills = await Bill.insertMany(billsToInsert, { session });
+        await session.commitTransaction();
+
+        createdPlan = plan;
+        insertedBills = bills;
+      } catch (txError: unknown) {
+        try {
+          await session.abortTransaction();
+        } catch {
+          // Suppress abort errors so original error is not lost
+        }
+
+        const isTxUnsupported =
+          txError instanceof Error &&
+          (txError.message.includes(
+            "Transaction numbers are only allowed on a replica set member or mongos",
+          ) ||
+            txError.message.includes("replica set") ||
+            (txError as { code?: number }).code === 20);
+
+        if (!isTxUnsupported) {
+          // If this is a real error like duplicate key (11000) or validation error, rethrow immediately
+          throw txError;
+        }
+
+        // Standalone MongoDB environment detected; fall through to non-transactional creation with compensation
+        createdPlan = null;
+        insertedBills = null;
+      } finally {
+        await session.endSession();
+        session = null;
+      }
+    }
+
+    // Standalone fallback: executed only if sessions cannot start or transactions are unsupported
+    if (!createdPlan) {
+      const plan = new InstallmentPlan(planData);
+      await plan.save();
+      createdPlan = plan;
+
+      try {
+        const billsToInsert = installmentBillsData.map((b) => ({
+          ...b,
+          planId: plan._id,
+        }));
+        insertedBills = await Bill.insertMany(billsToInsert);
+      } catch (insertError) {
+        // Rollback partially created plan and bills on standalone failure
+        await Bill.deleteMany({ planId: plan._id, userId });
+        await InstallmentPlan.findByIdAndDelete(plan._id);
+        throw insertError;
+      }
+    }
+
+    return res.status(201).json({
+      plan: createdPlan.toObject(),
+      installments: insertedBills!.map((b) =>
+        typeof (b as { toObject?: () => unknown }).toObject === "function"
+          ? (b as { toObject: () => unknown }).toObject()
+          : b,
+      ),
+    });
+  } catch (error: unknown) {
+    const mongoErr = error as { code?: number };
+    if (mongoErr?.code === 11000) {
+      return res.status(409).json({
+        error: "Duplicate installment plan creation detected for this request.",
+      });
+    }
+    console.error("Failed to create installment plan:", error);
+    return res.status(500).json({ error: "Failed to create installment plan." });
+  }
+});
+
+// GET /api/installments — list all installment plans for authenticated user
+app.get("/api/installments", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const rawStatus = req.query.status;
+    const filter: Record<string, unknown> = { userId };
+    if (
+      typeof rawStatus === "string" &&
+      ["active", "completed", "cancelled"].includes(rawStatus)
+    ) {
+      filter.status = rawStatus;
+    }
+
+    const plans = await InstallmentPlan.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(plans);
+  } catch (error) {
+    console.error("Failed to list installment plans:", error);
+    return res.status(500).json({ error: "Failed to list installment plans." });
+  }
+});
+
+// GET /api/installments/:id — get one plan with its full installment schedule
+app.get("/api/installments/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidPlanId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid installment plan ID format." });
+    }
+
+    const plan = await InstallmentPlan.findOne({
+      _id: req.params.id,
+      userId,
+    }).lean();
+
+    if (!plan) {
+      return res.status(404).json({ error: "Installment plan not found." });
+    }
+
+    const installments = await Bill.find({
+      planId: req.params.id,
+      userId,
+    })
+      .sort({ installmentNumber: 1 })
+      .lean();
+
+    return res.status(200).json({
+      plan,
+      installments,
+    });
+  } catch (error) {
+    console.error("Failed to get installment plan:", error);
+    return res.status(500).json({ error: "Failed to get installment plan." });
+  }
+});
+
+// PATCH /api/installments/:id — safe metadata update (name, category, planType)
+app.patch("/api/installments/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidPlanId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid installment plan ID format." });
+    }
+
+    const plan = await InstallmentPlan.findOne({ _id: req.params.id, userId });
+    if (!plan) {
+      return res.status(404).json({ error: "Installment plan not found." });
+    }
+
+    if (plan.status !== "active") {
+      return res.status(400).json({
+        error: `Cannot update an installment plan with status '${plan.status}'.`,
+      });
+    }
+
+    const parsed = installmentPlanUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid update data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    if (parsed.data.name !== undefined) {
+      plan.name = parsed.data.name;
+    }
+    if (parsed.data.category !== undefined) {
+      plan.category = parsed.data.category;
+    }
+    if (parsed.data.planType !== undefined) {
+      plan.planType = parsed.data.planType;
+    }
+
+    await plan.save();
+
+    // Sync category changes to unpaid future installments
+    if (parsed.data.category !== undefined) {
+      await Bill.updateMany(
+        { planId: plan._id, userId, status: { $ne: "paid" } },
+        { $set: { category: parsed.data.category } },
+      );
+    }
+
+    // Sync name changes to unpaid future installments
+    if (parsed.data.name !== undefined) {
+      const unpaidBills = await Bill.find({
+        planId: plan._id,
+        userId,
+        status: { $ne: "paid" },
+      });
+      for (const b of unpaidBills) {
+        if (b.installmentNumber && b.totalInstallments) {
+          b.name = `${plan.name} (${b.installmentNumber}/${b.totalInstallments})`;
+          await b.save();
+        }
+      }
+    }
+
+    return res.status(200).json(plan.toObject());
+  } catch (error) {
+    console.error("Failed to update installment plan:", error);
+    return res.status(500).json({ error: "Failed to update installment plan." });
+  }
+});
+
+// POST /api/installments/:id/cancel — cancel a plan and safely clean up unpaid future installments
+app.post("/api/installments/:id/cancel", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    if (!isValidPlanId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid installment plan ID format." });
+    }
+
+    const plan = await InstallmentPlan.findOne({ _id: req.params.id, userId });
+    if (!plan) {
+      return res.status(404).json({ error: "Installment plan not found." });
+    }
+
+    if (plan.status === "completed") {
+      return res.status(400).json({
+        error: "Completed installment plans cannot be cancelled.",
+      });
+    }
+
+    if (plan.status === "cancelled") {
+      return res.status(400).json({
+        error: "Installment plan is already cancelled.",
+      });
+    }
+
+    plan.status = "cancelled";
+    await plan.save();
+
+    // Identify unpaid installment bills before deleting them
+    const unpaidBills = await Bill.find({
+      planId: plan._id,
+      userId,
+      status: { $ne: "paid" },
+    })
+      .select("_id")
+      .lean();
+
+    const unpaidBillIds = unpaidBills.map((b) => b._id);
+
+    if (unpaidBillIds.length > 0) {
+      // Clean up reminder notifications associated with the unpaid bills
+      await cleanUpNotificationsForBills(userId, unpaidBillIds);
+
+      // Safely delete only unpaid installment occurrences (status != 'paid')
+      // All paid installments, their payment records, and historical notifications are strictly preserved!
+      await Bill.deleteMany({
+        _id: { $in: unpaidBillIds },
+        userId,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Installment plan cancelled successfully.",
+      plan: plan.toObject(),
+    });
+  } catch (error) {
+    console.error("Failed to cancel installment plan:", error);
+    return res.status(500).json({ error: "Failed to cancel installment plan." });
   }
 });
 
@@ -1834,4 +2323,10 @@ export {
   paymentCreateSchema,
   BillNote,
   noteCreateSchema,
+  InstallmentPlan,
+  calculateInstallmentPlanTotals,
+  installmentPlanCreateSchema,
+  installmentPlanUpdateSchema,
+  isValidPlanId,
+  syncInstallmentPlanBalance,
 };
