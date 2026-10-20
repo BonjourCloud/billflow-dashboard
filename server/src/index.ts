@@ -1176,6 +1176,26 @@ app.delete("/api/bills/:id", async (req, res) => {
 // Bill Payments Endpoints
 // ──────────────────────────────────────────────
 
+// GET /api/payments — get all payment records for authenticated user
+app.get("/api/payments", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const payments = await Payment.find({ userId })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .lean();
+
+    return res.status(200).json(payments);
+  } catch (error) {
+    console.error("Failed to list user payments:", error);
+    return res.status(500).json({ error: "Failed to list user payments." });
+  }
+});
+
 // GET /api/bills/:id/payments — get payment history for a bill (owner check)
 app.get("/api/bills/:id/payments", async (req, res) => {
   try {

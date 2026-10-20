@@ -40,6 +40,110 @@ export function getOverdueRelativeText(
 }
 
 /**
+ * ID type for notification entity references
+ */
+export type NotificationEntityId = mongoose.Types.ObjectId | string;
+
+/**
+ * Structured reminder notification payload
+ */
+export interface ReminderNotificationData {
+  type: "due_soon" | "overdue";
+  title: string;
+  message: string;
+  billId: NotificationEntityId;
+  planId: NotificationEntityId | null;
+  seriesId: NotificationEntityId | null;
+  billingCycle: string | null;
+  dueDate: Date;
+  amount: number;
+}
+
+/**
+ * Builds reminder notification data for an upcoming bill occurrence
+ */
+export function buildDueSoonReminderData(
+  bill: {
+    _id: NotificationEntityId;
+    name: string;
+    amount: number;
+    dueDate: Date | string;
+    planId?: NotificationEntityId | null;
+    seriesId?: NotificationEntityId | null;
+    billingCycle?: string | null;
+  },
+  refMidnightUtc: number,
+): ReminderNotificationData {
+  const d = bill.dueDate instanceof Date ? bill.dueDate : new Date(bill.dueDate);
+  const billDueMidnight = Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+  );
+
+  const relativeText = getUpcomingRelativeText(billDueMidnight, refMidnightUtc);
+  const dateStr = formatUtcDateString(d);
+  const amountStr = bill.amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return {
+    type: "due_soon",
+    title: `Payment Due Soon: ${bill.name}`,
+    message: `$${amountStr} ${relativeText} (${dateStr}).`,
+    billId: bill._id,
+    seriesId: bill.seriesId ?? null,
+    planId: bill.planId ?? null,
+    billingCycle: bill.billingCycle ?? null,
+    dueDate: d,
+    amount: bill.amount,
+  };
+}
+
+/**
+ * Builds reminder notification data for an overdue bill occurrence
+ */
+export function buildOverdueReminderData(
+  bill: {
+    _id: NotificationEntityId;
+    name: string;
+    amount: number;
+    dueDate: Date | string;
+    planId?: NotificationEntityId | null;
+    seriesId?: NotificationEntityId | null;
+    billingCycle?: string | null;
+  },
+  refMidnightUtc: number,
+): ReminderNotificationData {
+  const d = bill.dueDate instanceof Date ? bill.dueDate : new Date(bill.dueDate);
+  const billDueMidnight = Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+  );
+
+  const relativeText = getOverdueRelativeText(billDueMidnight, refMidnightUtc);
+  const dateStr = formatUtcDateString(d);
+  const amountStr = bill.amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return {
+    type: "overdue",
+    title: `Payment Overdue: ${bill.name}`,
+    message: `$${amountStr} was due on ${dateStr} (${relativeText}).`,
+    billId: bill._id,
+    seriesId: bill.seriesId ?? null,
+    planId: bill.planId ?? null,
+    billingCycle: bill.billingCycle ?? null,
+    dueDate: d,
+    amount: bill.amount,
+  };
+}
+
+/**
  * Idempotently generates reminders (due_soon within 5 days, and overdue)
  * for the authenticated user based on active bill occurrences.
  */
@@ -83,21 +187,7 @@ export async function generateRemindersForUser(
 
   // Process due_soon reminders
   for (const bill of dueSoonBills) {
-    const billDueMidnight = Date.UTC(
-      bill.dueDate.getUTCFullYear(),
-      bill.dueDate.getUTCMonth(),
-      bill.dueDate.getUTCDate(),
-    );
-
-    const relativeText = getUpcomingRelativeText(billDueMidnight, refMidnightUtc);
-    const dateStr = formatUtcDateString(bill.dueDate);
-    const amountStr = bill.amount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-    const title = `Payment Due Soon: ${bill.name}`;
-    const message = `$${amountStr} ${relativeText} (${dateStr}).`;
+    const reminderData = buildDueSoonReminderData(bill, refMidnightUtc);
 
     // Check if notification already exists (active, read, or dismissed)
     const existing = await Notification.findOne({
@@ -115,14 +205,7 @@ export async function generateRemindersForUser(
     try {
       await Notification.create({
         userId,
-        type: "due_soon",
-        title,
-        message,
-        billId: bill._id,
-        seriesId: bill.seriesId ?? null,
-        billingCycle: bill.billingCycle ?? null,
-        dueDate: bill.dueDate,
-        amount: bill.amount,
+        ...reminderData,
         isRead: false,
         isDismissed: false,
       });
@@ -139,21 +222,7 @@ export async function generateRemindersForUser(
 
   // Process overdue reminders
   for (const bill of overdueBills) {
-    const billDueMidnight = Date.UTC(
-      bill.dueDate.getUTCFullYear(),
-      bill.dueDate.getUTCMonth(),
-      bill.dueDate.getUTCDate(),
-    );
-
-    const relativeText = getOverdueRelativeText(billDueMidnight, refMidnightUtc);
-    const dateStr = formatUtcDateString(bill.dueDate);
-    const amountStr = bill.amount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-    const title = `Payment Overdue: ${bill.name}`;
-    const message = `$${amountStr} was due on ${dateStr} (${relativeText}).`;
+    const reminderData = buildOverdueReminderData(bill, refMidnightUtc);
 
     const existing = await Notification.findOne({
       userId,
@@ -170,14 +239,7 @@ export async function generateRemindersForUser(
     try {
       await Notification.create({
         userId,
-        type: "overdue",
-        title,
-        message,
-        billId: bill._id,
-        seriesId: bill.seriesId ?? null,
-        billingCycle: bill.billingCycle ?? null,
-        dueDate: bill.dueDate,
-        amount: bill.amount,
+        ...reminderData,
         isRead: false,
         isDismissed: false,
       });

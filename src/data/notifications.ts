@@ -8,6 +8,7 @@ export interface NotificationItem {
   message: string;
   billId: string;
   seriesId: string | null;
+  planId?: string | null;
   billingCycle: string | null;
   dueDate: string;
   amount: number;

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import { Bill } from '@/data/bills';
 import { calculateInsights } from '@/lib/insights';
+import { useInstallmentStore } from '@/hooks/useInstallmentStore';
 
 interface AIInsightsWidgetProps {
   bills?: Bill[];
@@ -10,7 +11,11 @@ interface AIInsightsWidgetProps {
 }
 
 export function AIInsightsWidget({ bills = [], isLoading = false }: AIInsightsWidgetProps) {
-  const insights = useMemo(() => calculateInsights(bills), [bills]);
+  const { allPlans } = useInstallmentStore();
+  const insights = useMemo(
+    () => calculateInsights(bills, new Date(), { plans: allPlans }),
+    [bills, allPlans],
+  );
 
   return (
     <motion.div

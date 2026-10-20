@@ -1,9 +1,16 @@
 import { Bill, BillCategory } from '@/data/bills';
+import { PaymentRecord } from '@/data/billDetails';
+import { InstallmentPlan } from '@/data/installments';
 
 export interface InsightItem {
   id: string;
   type: 'warning' | 'info';
   text: string;
+}
+
+export interface InsightOptions {
+  payments?: PaymentRecord[];
+  plans?: InstallmentPlan[];
 }
 
 /**
@@ -193,6 +200,7 @@ export function getDominantCategory(bills: Bill[]): {
 export function calculateInsights(
   bills: Bill[],
   referenceDate: Date = new Date(),
+  options?: InsightOptions,
 ): InsightItem[] {
   const insights: InsightItem[] = [];
 
@@ -224,7 +232,31 @@ export function calculateInsights(
     });
   }
 
-  // 3. Dominant spending category
+  // 3. Active installment financing insight (if plans provided)
+  if (options?.plans && options.plans.length > 0) {
+    const activePlans = options.plans.filter((p) => p.status === 'active');
+    if (activePlans.length > 0) {
+      const totalRemaining = activePlans.reduce(
+        (sum, p) => sum + (p.remainingBalance || 0),
+        0,
+      );
+      const monthlyCommitment = activePlans.reduce(
+        (sum, p) => sum + (p.installmentAmount || 0),
+        0,
+      );
+      insights.push({
+        id: 'installment-financing',
+        type: 'info',
+        text: `Financing overview: You have ${activePlans.length} active installment ${
+          activePlans.length === 1 ? 'plan' : 'plans'
+        } with ${formatCurrency(totalRemaining)} remaining balance (${formatCurrency(
+          monthlyCommitment,
+        )}/mo commitment).`,
+      });
+    }
+  }
+
+  // 4. Dominant spending category
   const dominant = getDominantCategory(bills);
   if (dominant) {
     const formattedCat = formatCategory(dominant.category);
@@ -236,8 +268,9 @@ export function calculateInsights(
     });
   }
 
-  // 4. Helpful onboarding guidance when insufficient data exists
-  if (bills.length === 0) {
+  // 5. Helpful onboarding guidance when insufficient data exists
+  const hasPlans = options?.plans && options.plans.length > 0;
+  if (bills.length === 0 && !hasPlans) {
     insights.push({
       id: 'onboarding-empty',
       type: 'info',

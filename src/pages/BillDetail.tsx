@@ -147,6 +147,7 @@ const BillDetail = () => {
     onSuccess: () => {
       toast.success('Payment recorded successfully');
       queryClient.invalidateQueries({ queryKey: ['payments', id] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['bills', id] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -169,6 +170,7 @@ const BillDetail = () => {
         // Payment was already recorded (e.g. prior attempt succeeded before a network timeout or duplicate retry)
         toast.info('This payment was already recorded.');
         queryClient.invalidateQueries({ queryKey: ['payments', id] });
+        queryClient.invalidateQueries({ queryKey: ['payments'] });
         queryClient.invalidateQueries({ queryKey: ['bills', id] });
         queryClient.invalidateQueries({ queryKey: ['bills'] });
         queryClient.invalidateQueries({ queryKey: ['notifications'] });

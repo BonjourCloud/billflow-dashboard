@@ -36,6 +36,12 @@ const notificationSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InstallmentPlan",
+      default: null,
+      index: true,
+    },
     billingCycle: {
       type: String,
       default: null,

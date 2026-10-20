@@ -182,6 +182,11 @@ export function NotificationBell() {
                         >
                           {item.title}
                         </p>
+                        {item.planId && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 shrink-0">
+                            EMI
+                          </span>
+                        )}
                         {!item.isRead && (
                           <span
                             className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"

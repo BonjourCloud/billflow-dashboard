@@ -55,6 +55,7 @@ export function useInstallmentStore() {
       );
       queryClient.invalidateQueries({ queryKey: ['installments'] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
@@ -112,6 +113,7 @@ export function useInstallmentStore() {
       queryClient.invalidateQueries({ queryKey: ['installments'] });
       queryClient.invalidateQueries({ queryKey: ['installments', res.plan._id] });
       queryClient.invalidateQueries({ queryKey: ['bills'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (err: Error) => {
