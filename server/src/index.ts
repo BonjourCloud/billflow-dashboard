@@ -55,6 +55,12 @@ const PORT = Number(process.env.PORT) || 5001;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:8080";
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { SiteSettings } from "./models/SiteSettings.js";
+import {
+  PricingTier,
+  seedPricingTiersIfEmpty,
+  createPricingTierSchema,
+  updatePricingTierSchema,
+} from "./models/PricingTier.js";
 
 app.use(helmet());
 app.use(cors({ origin: CLIENT_URL }));
@@ -241,6 +247,217 @@ app.get("/api/site-settings", async (_req, res) => {
   }
 });
 
+async function isUserAdmin(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+
+  const adminIds = (process.env.ADMIN_CLERK_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (adminIds.includes(userId)) {
+    return true;
+  }
+
+  const user = await User.findOne({ clerkUserId: userId })
+    .select("role")
+    .lean();
+  return user?.role === "admin";
+}
+
+async function requireAdminAuth(
+  req: express.Request,
+  res: express.Response,
+): Promise<string | null> {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required." });
+    return null;
+  }
+  const admin = await isUserAdmin(userId);
+  if (!admin) {
+    res.status(403).json({ error: "Admin access required." });
+    return null;
+  }
+  return userId;
+}
+
+app.get("/api/pricing-tiers", async (req, res) => {
+  try {
+    await seedPricingTiersIfEmpty();
+
+    const includeHidden = req.query.includeHidden === "true";
+    let showAll = false;
+
+    if (includeHidden) {
+      const { userId } = getAuth(req);
+      if (userId && (await isUserAdmin(userId))) {
+        showAll = true;
+      }
+    }
+
+    const filter = showAll ? {} : { is_visible: true };
+    const tiers = await PricingTier.find(filter)
+      .sort({ sort_order: 1, createdAt: 1 })
+      .lean();
+
+    return res.status(200).json(
+      tiers.map((t) => ({
+        id: t._id.toString(),
+        slug: t.slug,
+        name: t.name,
+        price_monthly: t.price_monthly,
+        price_yearly: t.price_yearly,
+        billing_period: t.billing_period,
+        cta_label: t.cta_label,
+        is_highlighted: t.is_highlighted,
+        is_visible: t.is_visible,
+        sort_order: t.sort_order,
+        features: t.features ?? [],
+        updated_at: t.updatedAt
+          ? t.updatedAt.toISOString()
+          : t.createdAt
+            ? t.createdAt.toISOString()
+            : new Date().toISOString(),
+      })),
+    );
+  } catch (error) {
+    console.error("Failed to load pricing tiers:", error);
+    return res.status(500).json({ error: "Failed to load pricing tiers." });
+  }
+});
+
+app.post("/api/admin/pricing-tiers", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const parsed = createPricingTierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues?.[0]?.message || "Invalid pricing tier data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const existingSlug = await PricingTier.findOne({
+      slug: parsed.data.slug,
+    }).lean();
+    if (existingSlug) {
+      return res.status(409).json({
+        error: `A pricing tier with slug '${parsed.data.slug}' already exists.`,
+      });
+    }
+
+    const tier = await PricingTier.create(parsed.data);
+
+    return res.status(201).json({
+      id: tier._id.toString(),
+      slug: tier.slug,
+      name: tier.name,
+      price_monthly: tier.price_monthly,
+      price_yearly: tier.price_yearly,
+      billing_period: tier.billing_period,
+      cta_label: tier.cta_label,
+      is_highlighted: tier.is_highlighted,
+      is_visible: tier.is_visible,
+      sort_order: tier.sort_order,
+      features: tier.features ?? [],
+      updated_at: tier.updatedAt.toISOString(),
+    });
+  } catch (error) {
+    console.error("Failed to create pricing tier:", error);
+    return res.status(500).json({ error: "Failed to create pricing tier." });
+  }
+});
+
+app.patch("/api/admin/pricing-tiers/:id", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid pricing tier ID format." });
+    }
+
+    const parsed = updatePricingTierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error:
+          parsed.error.issues?.[0]?.message ||
+          "Invalid pricing tier update data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    if (parsed.data.slug) {
+      const existingSlug = await PricingTier.findOne({
+        slug: parsed.data.slug,
+        _id: { $ne: id },
+      }).lean();
+      if (existingSlug) {
+        return res.status(409).json({
+          error: `A pricing tier with slug '${parsed.data.slug}' already exists.`,
+        });
+      }
+    }
+
+    const updated = await PricingTier.findByIdAndUpdate(
+      id,
+      { $set: parsed.data },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!updated) {
+      return res.status(404).json({ error: "Pricing tier not found." });
+    }
+
+    return res.status(200).json({
+      id: updated._id.toString(),
+      slug: updated.slug,
+      name: updated.name,
+      price_monthly: updated.price_monthly,
+      price_yearly: updated.price_yearly,
+      billing_period: updated.billing_period,
+      cta_label: updated.cta_label,
+      is_highlighted: updated.is_highlighted,
+      is_visible: updated.is_visible,
+      sort_order: updated.sort_order,
+      features: updated.features ?? [],
+      updated_at: updated.updatedAt
+        ? updated.updatedAt.toISOString()
+        : new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Failed to update pricing tier:", error);
+    return res.status(500).json({ error: "Failed to update pricing tier." });
+  }
+});
+
+app.delete("/api/admin/pricing-tiers/:id", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid pricing tier ID format." });
+    }
+
+    const deleted = await PricingTier.findByIdAndDelete(id).lean();
+    if (!deleted) {
+      return res.status(404).json({ error: "Pricing tier not found." });
+    }
+
+    return res
+      .status(200)
+      .json({ message: "Pricing tier deleted successfully." });
+  } catch (error) {
+    console.error("Failed to delete pricing tier:", error);
+    return res.status(500).json({ error: "Failed to delete pricing tier." });
+  }
+});
 
 app.patch("/api/admin/branding", async (req, res) => {
   try {
@@ -1128,6 +1345,7 @@ export async function stopServer(options?: {
 export async function startServer(): Promise<void> {
   try {
     await connectDB();
+    await seedPricingTiersIfEmpty();
 
     server = app.listen(PORT, () => {
       console.log(`BillFlow API running at http://localhost:${PORT}`);
@@ -1160,4 +1378,4 @@ if (process.env.NODE_ENV !== "test") {
   void startServer();
 }
 
-export { app, mongoose };
+export { app, mongoose, PricingTier, seedPricingTiersIfEmpty };

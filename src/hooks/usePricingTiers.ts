@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 
 export interface PricingTier {
   id: string;
@@ -16,44 +16,31 @@ export interface PricingTier {
   updated_at: string;
 }
 
-interface RawPricingTierRow {
-  id: string;
-  slug: string;
-  name: string;
-  price_monthly: number | string;
-  price_yearly: number | string;
-  billing_period: string;
-  cta_label: string;
-  is_highlighted: boolean;
-  is_visible: boolean;
-  sort_order: number;
-  features?: unknown;
-  updated_at: string;
-}
-
 export function usePricingTiers(opts?: { includeHidden?: boolean }) {
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('pricing_tiers').select('*').order('sort_order', { ascending: true });
-    if (!opts?.includeHidden) q = q.eq('is_visible', true);
-    const { data, error } = await q;
-    if (!error && data) {
-      setTiers(
-        (data as unknown as RawPricingTierRow[]).map((t) => ({
-          ...t,
-          features: Array.isArray(t.features) ? (t.features as string[]) : [],
-          price_monthly: Number(t.price_monthly),
-          price_yearly: Number(t.price_yearly),
-        }))
-      );
+    try {
+      const url = opts?.includeHidden
+        ? '/api/pricing-tiers?includeHidden=true'
+        : '/api/pricing-tiers';
+      const data = await apiRequest<PricingTier[]>(url, {
+        authenticated: Boolean(opts?.includeHidden),
+      });
+      setTiers(data ?? []);
+    } catch (error) {
+      console.error('Failed to load pricing tiers:', error);
+      setTiers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [opts?.includeHidden]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return { tiers, loading, refresh: load };
 }
