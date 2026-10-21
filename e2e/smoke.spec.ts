@@ -122,6 +122,25 @@ test("signed-out visitors cannot open the admin panel", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("page metadata and favicon are BillFlow-branded", async ({ page, request }) => {
+  // Crawlers and link previews read the static HTML.
+  const html = await (await request.get("/")).text();
+  expect(html).toContain("<title>BillFlow</title>");
+  expect(html).toContain('<meta property="og:title" content="BillFlow" />');
+  expect(html.toLowerCase()).not.toContain("lovable");
+
+  // At runtime the title follows the brand name from site settings.
+  await mockApi(page);
+  await page.goto("/");
+  await expect(page).toHaveTitle(siteSettings.brand_name);
+
+  for (const icon of ["/favicon.svg", "/favicon.ico"]) {
+    const response = await request.get(icon);
+    expect(response.status(), icon).toBe(200);
+    expect(response.headers()["content-type"], icon).toMatch(/^image\//);
+  }
+});
+
 test("unknown routes show the 404 page", async ({ page }) => {
   await mockApi(page);
 
