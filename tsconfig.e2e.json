@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    // Full-stack journey harness: browser code (fake Clerk), Node code (test
+    // API server), and Playwright specs, all type-checked with null safety.
+    "strictNullChecks": true,
+    "types": ["node"]
+  },
+  "include": ["e2e/fullstack", "playwright.fullstack.config.ts", "vite.e2e.config.ts", "src/vite-env.d.ts"],
+  "exclude": []
+}

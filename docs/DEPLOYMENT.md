@@ -10,7 +10,7 @@ BillFlow deploys as three pieces:
 
 Authentication uses Clerk, and optional branding-logo uploads use a private AWS S3 bucket.
 
-> **Status:** The configuration below is checked by CI and by tests in this repo (see [TESTING.md](TESTING.md)). A real Vercel/Render deployment, a live Atlas cluster, and Clerk's production API have **not** been exercised from this repository yet; use the post-deploy checklist at the end the first time you deploy.
+> **Status (Iteration 5):** BillFlow has **not been deployed yet**; no Vercel project, Render service, Atlas cluster, or production Clerk instance has been connected from this repository. What has been verified locally: the compiled API started exactly as Render runs it (`npm start`, `NODE_ENV=production`, `TRUST_PROXY=1`) against a MongoDB replica set, with `/api/health` and `/api/ready` returning `200`, JSON `401`/`404`/`400` errors, CORS limited to `CLIENT_URL`, Helmet security headers, rate-limit headers, and no secrets in its logs. The configuration is also checked by CI and the tests in [TESTING.md](TESTING.md). Use the post-deploy checklist at the end the first time you deploy.
 
 ## Recommended order
 
@@ -124,6 +124,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Must be set together; enable logo uploads |
 | `AWS_REGION` | — | e.g. `us-east-1` |
 | `AWS_S3_BUCKET` | Production, if AWS credentials are set | Bucket for logos |
+| `CLERK_TELEMETRY_DISABLED` | — | Optional. Set to `1` to turn off the Clerk SDK's usage telemetry, which it sends when using development keys. |
 
 ## CI (GitHub Actions)
 
@@ -131,6 +132,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 
 - **frontend** — installs both packages, then lint, type-check, unit tests, integration tests (in-memory MongoDB; the binary is cached), and a production build with placeholder `VITE_API_URL`/`VITE_CLERK_PUBLISHABLE_KEY` values (a compile check only).
 - **server** — type-check and build of `server/`.
+- **fullstack-e2e** — Playwright journeys at three viewport sizes against the real API on an in-memory MongoDB, with a test-only Clerk stand-in. Needs no secrets.
 - **e2e** — Playwright smoke tests against a production build. Requires the optional repository secret `VITE_CLERK_PUBLISHABLE_KEY` (a Clerk development key is enough). Without it — including on pull requests from forks — the job's steps are skipped with a notice instead of failing.
 
 No other secrets are needed; CI never connects to Atlas, Clerk's Backend API, or S3. Deployment is not triggered by CI: Vercel and Render deploy from the connected branch on their own.

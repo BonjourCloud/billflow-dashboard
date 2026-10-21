@@ -21,11 +21,12 @@ npm run dev                   # frontend on http://localhost:8080 (needs .env)
 | Command | What it runs | Needs |
 |---|---|---|
 | `npm run lint` | ESLint | — |
-| `npm run typecheck` | `tsc` for the app, the Vite/Playwright config, and the tests | — |
+| `npm run typecheck` | `tsc` for the app, the Vite/Playwright configs, the tests, and the full-stack journey harness | — |
 | `npm run typecheck --prefix server` | `tsc` for the API | Server dependencies |
 | `npm test` | Unit tests (Vitest) | Server dependencies |
 | `npm run test:integration` | HTTP + MongoDB integration tests | MongoDB binary (downloaded on first run) |
-| `npm run test:e2e` | Playwright smoke tests | Chromium + a Clerk publishable key |
+| `npm run test:e2e` | Playwright smoke tests (signed out, real Clerk) | Chromium + a Clerk publishable key |
+| `npm run test:e2e:fullstack` | Playwright journeys against the real API at three viewport sizes | Chromium, server dependencies, MongoDB binary |
 | `npm run build` | Production frontend build | `VITE_API_URL`, `VITE_CLERK_PUBLISHABLE_KEY` |
 | `npm run build --prefix server` | API build to `server/dist` | — |
 
@@ -69,7 +70,9 @@ They verify:
 - installment plans are created in a transaction and rolled back by MongoDB when inserting bills fails; idempotency keys; partial and full payments updating plan balances; duplicate-payment protection;
 - logo uploads: real PNG/JPEG/WebP files accepted, non-images and mismatched types rejected with `400`, the 2 MB limit, and the `PutObject` request built (the S3 client is replaced with a stub);
 - public reads (`/api/site-settings`, `/api/pricing-tiers`) don't write to an empty database, and concurrent startup seeding creates each default tier once;
-- Clerk profile sync is cached per user for 15 minutes while role changes apply immediately.
+- Clerk profile sync is cached per user for 15 minutes while role changes apply immediately;
+- every `:id` route returns a JSON `4xx` (never `500`) for malformed IDs and `404` for unknown ones; owner IDs in query strings or bodies are ignored or rejected; MongoDB operator injection and invalid bill fields are rejected (`request-validation.test.ts`);
+- core features through the real routes: bill CRUD, payment history and notes, recurring bills with `this`/`future`/`all` scopes, subscription generation without duplicates under concurrent loads, reminders (one per bill and type, read/read-all/dismiss, cleared on payment or deletion), installment update/cancel, pricing-tier and theme validation, admin summary, and generic `500`s without leaking internals when the database fails (`core-features.test.ts`).
 
 **First run:** `mongodb-memory-server` downloads a MongoDB binary (around 100 MB) into `node_modules/.cache/mongodb-memory-server/`. Later runs reuse it until `node_modules` is reinstalled. CI skips the install-time download (`MONGOMS_DISABLE_POSTINSTALL=1`) and caches that directory, keyed on `package-lock.json`.
 
@@ -84,16 +87,41 @@ They check that the landing page renders branding and pricing from the API, that
 
 **First run:** install the browser once with `npx playwright install chromium` (in CI: `npx playwright install --with-deps chromium`).
 
-Signed-in flows are **not** covered by browser tests; they would need a dedicated Clerk test user.
+Signed-in flows with real Clerk are **not** covered; they would need a dedicated Clerk test user. The full-stack journeys below cover signed-in flows with a Clerk stand-in.
+
+### Full-stack browser journeys — `npm run test:e2e:fullstack`
+
+Playwright (`playwright.fullstack.config.ts`, specs and harness in `e2e/fullstack/`). It starts two servers:
+
+- **API** (`e2e/fullstack/api-server.ts`): the real Express app and routes on an in-memory MongoDB replica set. Only authentication is substituted: requests carry `Authorization: Bearer e2e:<userId>`, and the Clerk Backend API client is stubbed. `user_e2e_admin` is the environment-listed admin.
+- **Frontend**: the production build made with `vite.e2e.config.ts`, which replaces `@clerk/react` with `e2e/fullstack/fake-clerk-react.tsx`. The stand-in starts unloaded like the real SDK, keeps the signed-in user in `localStorage`, and "Continue with Google" signs in immediately. The normal `vite.config.ts` and `npm run build` never include it (checked by `deploy-readiness.test.ts`).
+
+Each journey runs at desktop (1440×900), tablet (820×1180, touch), and mobile (Pixel 7) sizes, signs in as its own user, fails on any uncaught page error, and checks that key pages don't scroll horizontally:
+
+- sign in from the landing page, reach the dashboard, sign out, and be redirected from `/dashboard` afterwards;
+- add a bill, open it, record a UPI payment, and see it in the payment history as paid;
+- add a subscription and cancel it;
+- create an installment plan (checking the live per-month preview) and view its six-installment schedule;
+- see a due-soon reminder in the notification bell and mark all read;
+- a non-admin is redirected away from `/admin`; an admin opens `/admin`, `/admin/users`, and `/admin/pricing` directly.
+
+What it does not prove: real Clerk sign-in, real token verification, Atlas, or S3.
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, type-check, unit tests, integration tests, and both builds on every pull request and on pushes to `main` and `feature/**` branches. The Playwright job runs only when the repository secret `VITE_CLERK_PUBLISHABLE_KEY` is set; otherwise it is skipped with a notice. See [DEPLOYMENT.md](DEPLOYMENT.md#ci-github-actions).
+`.github/workflows/ci.yml` runs lint, type-check, unit tests, integration tests, the full-stack journeys, and both builds on every pull request and on pushes to `main` and `feature/**` branches. The signed-out smoke job (real Clerk) runs only when the repository secret `VITE_CLERK_PUBLISHABLE_KEY` is set; otherwise it is skipped with a notice. See [DEPLOYMENT.md](DEPLOYMENT.md#ci-github-actions).
 
 ## What no automated test covers
 
 - A real MongoDB Atlas cluster (network access, credentials, performance).
 - Real Clerk token verification and the Clerk Backend API.
 - S3 uploads and pre-signed URLs.
-- Signed-in user flows in a browser.
+- Signed-in user flows in a browser with **real** Clerk (the full-stack journeys use a stand-in).
 - The deployed Vercel and Render configuration (beyond the drift checks on the config files).
+
+## Reading results
+
+- **Vitest** prints `Test Files N passed` and `Tests N passed`. Any `×` line or `failed` count is a failure; the exit code is non-zero.
+- **Playwright** prints `N passed`. `flaky` means a test failed and then passed on retry. The full-stack config uses no retries, so a flaky result can't hide a failure there; treat `flaky` in the smoke tests as a failure to investigate. Failure traces and screenshots are in `test-results/`; open one with `npx playwright show-trace <trace.zip>`.
+- **`npm run typecheck` / `npm run lint`**: lint warnings (currently 8 fast-refresh warnings in shadcn/ui files) don't fail the run; errors do.
+- **Skipped CI job**: the signed-out smoke job shows as passed with only a "Skipping browser smoke tests" notice when the `VITE_CLERK_PUBLISHABLE_KEY` secret is missing. That means its tests did not run.

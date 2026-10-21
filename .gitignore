@@ -43,3 +43,6 @@ server/dist/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Full-stack e2e build (vite.e2e.config.ts)
+/dist-e2e/

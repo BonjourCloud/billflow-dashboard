@@ -18,5 +18,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "e2e"]
+  "include": ["vite.config.ts", "playwright.config.ts", "e2e"],
+  "exclude": ["e2e/fullstack"]
 }

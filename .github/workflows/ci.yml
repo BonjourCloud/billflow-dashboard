@@ -119,6 +119,51 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Major user journeys at desktop, tablet, and mobile sizes: the production
+  # frontend build (with a test-only Clerk stand-in) against the real API on an
+  # in-memory MongoDB. Needs no secrets. See docs/TESTING.md.
+  fullstack-e2e:
+    name: Full-stack browser journeys
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        env:
+          MONGOMS_DISABLE_POSTINSTALL: "1"
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Cache MongoDB binaries
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full-stack journeys
+        run: npm run test:e2e:fullstack
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-fullstack-report
+          path: playwright-report/
+          retention-days: 7
+
   server:
     name: Server typecheck and build
     runs-on: ubuntu-latest

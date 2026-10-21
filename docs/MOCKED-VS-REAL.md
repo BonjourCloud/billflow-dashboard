@@ -13,6 +13,8 @@ The app no longer uses mock data: every screen reads and writes through the Expr
 | Clerk Backend API (user lookups) | Real (`clerkClient`) | Mocked | In-memory fake directory | Not used |
 | AWS S3 (logos) | Real when AWS credentials are set; otherwise uploads return 503 | Client configuration only | Not used | Not used |
 
+**Full-stack journeys** (`npm run test:e2e:fullstack`) use the real Express API and a real (in-memory) MongoDB, and the production frontend build. Only Clerk is substituted: a test-only stand-in for `@clerk/react` in the browser, header-based auth on the API, and a stubbed Clerk Backend API. S3 is not used.
+
 ## Features that are intentionally local
 
 | Feature | How it works |
@@ -30,7 +32,7 @@ Configuration for these exists and is covered by tests in this repo, but has not
 - A live MongoDB Atlas cluster.
 - Clerk production keys, token verification, and the Clerk Backend API.
 - S3 logo uploads and pre-signed URLs.
-- Signed-in flows in a real browser.
+- Signed-in flows with real Clerk sign-in (they are covered with a Clerk stand-in).
 
 See [DEPLOYMENT.md](DEPLOYMENT.md#post-deploy-checklist-manual) for the manual checklist.
 

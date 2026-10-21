@@ -172,3 +172,31 @@ describe("Phase 4C — deployment configuration", () => {
     });
   });
 });
+
+describe("Test-only Clerk stand-in never reaches the production build", () => {
+  const read = (path: string) => readFileSync(resolve(repoRoot, path), "utf8");
+
+  it("is wired only through vite.e2e.config.ts", () => {
+    expect(read("vite.config.ts")).not.toMatch(/fake-clerk|e2e\/fullstack/);
+    expect(read("vite.e2e.config.ts")).toMatch(/fake-clerk-react\.tsx/);
+  });
+
+  it("is not used by the production build commands", () => {
+    const pkg = JSON.parse(read("package.json"));
+    expect(pkg.scripts.build).toBe("vite build");
+    expect(JSON.parse(read("vercel.json")).buildCommand).toBe("npm run build");
+    expect(read("render.yaml")).not.toMatch(/e2e/);
+  });
+
+  it("is not imported by application or server code", async () => {
+    const { execSync } = await import("node:child_process");
+    const hits = execSync(
+      "grep -rlE 'fake-clerk|e2e/fullstack' src server/src || true",
+      { cwd: repoRoot, encoding: "utf8" },
+    )
+      .split("\n")
+      .filter(Boolean)
+      .filter((file) => !file.startsWith("src/test/"));
+    expect(hits).toEqual([]);
+  });
+});

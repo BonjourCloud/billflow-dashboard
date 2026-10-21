@@ -8,12 +8,13 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.test.json && tsc -p tsconfig.e2e.json",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:fullstack": "playwright test -c playwright.fullstack.config.ts"
   },
   "dependencies": {
     "@clerk/react": "^6.17.8",

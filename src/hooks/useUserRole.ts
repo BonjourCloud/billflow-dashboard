@@ -15,7 +15,12 @@ export function useUserRole() {
   // the role is only reloaded when the signed-in user actually changes.
   const userId = user?.id ?? null;
   const [roles, setRoles] = useState<AppRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The user ID the current `roles` belong to. Deriving `loading` from it
+  // during render (instead of a separate flag set in the effect) prevents a
+  // stale "loaded, no roles" result in the render where a user first appears,
+  // e.g. when Clerk finishes loading on a direct visit to /admin. That stale
+  // render made AdminRoute redirect admins to /dashboard.
+  const [resolvedFor, setResolvedFor] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,11 +28,9 @@ export function useUserRole() {
     async function load() {
       if (!userId) {
         setRoles([]);
-        setLoading(false);
+        setResolvedFor(null);
         return;
       }
-
-      setLoading(true);
 
       try {
         const data = await apiRequest<UserRoleResponse>(
@@ -44,7 +47,7 @@ export function useUserRole() {
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          setResolvedFor(userId);
         }
       }
     }
@@ -56,9 +59,12 @@ export function useUserRole() {
     };
   }, [userId]);
 
+  const loading = resolvedFor !== userId;
+  const currentRoles = loading ? [] : roles;
+
   return {
-    roles,
-    isAdmin: roles.includes('admin'),
+    roles: currentRoles,
+    isAdmin: currentRoles.includes('admin'),
     loading,
   };
 }
