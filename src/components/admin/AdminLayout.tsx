@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, DollarSign, Palette, ImageIcon, ArrowLeft, LogOut, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,7 +55,10 @@ export default function AdminLayout() {
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">
-        <Outlet />
+        {/* Admin pages are lazy-loaded; keep the sidebar visible while one loads. */}
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

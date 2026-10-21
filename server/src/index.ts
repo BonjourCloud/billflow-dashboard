@@ -868,7 +868,18 @@ const brandingSettingsSchema = z.object({
   hero_headline: z.string().trim().min(1).max(120),
   hero_subheadline: z.string().trim().min(1).max(400),
   hero_cta_label: z.string().trim().min(1).max(40),
-  logo_url: z.string().url().nullable(),
+  // Rendered as <img src> on the public landing page: allow only https URLs
+  // (uploaded S3 objects or pasted links), never javascript:/data:/http:.
+  logo_url: z
+    .string()
+    .trim()
+    .max(2048)
+    .url()
+    // zod still runs refinements after .url() fails, so parse defensively.
+    .refine((value) => URL.canParse(value) && new URL(value).protocol === "https:", {
+      message: "Logo URL must use https.",
+    })
+    .nullable(),
 }).strict();
 
 const themeSettingsSchema = z.object({
@@ -2465,6 +2476,26 @@ export async function stopServer(options?: {
   }
 }
 
+/**
+ * Summarizes a startup failure for logs: the error name and message (plus the
+ * cause's), with credentials in any connection string replaced by "***".
+ */
+export function describeStartupError(error: unknown): string {
+  const redact = (text: string) =>
+    text.replace(/(mongodb(?:\+srv)?:\/\/)[^@/\s]+@/gi, "$1***@");
+
+  if (!(error instanceof Error)) {
+    return redact(String(error));
+  }
+
+  let summary = `${error.name}: ${error.message}`;
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause instanceof Error) {
+    summary += ` (cause: ${cause.name}: ${cause.message})`;
+  }
+  return redact(summary);
+}
+
 export async function startServer(): Promise<void> {
   try {
     await connectDB();
@@ -2473,9 +2504,10 @@ export async function startServer(): Promise<void> {
     server = app.listen(PORT, () => {
       console.log(`BillFlow API running at http://localhost:${PORT}`);
     });
-  } catch {
+  } catch (error) {
     console.error(
-      "Failed to start BillFlow API. Check MONGODB_URI and Atlas network access.",
+      `Failed to start BillFlow API: ${describeStartupError(error)}\n` +
+        "Check MONGODB_URI, Atlas database user, and Atlas network access.",
     );
     process.exit(1);
   }

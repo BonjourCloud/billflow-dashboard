@@ -58,11 +58,13 @@ jobs:
       - name: Integration tests (in-memory MongoDB replica set)
         run: npm run test:integration
 
-      # Production builds require VITE_API_URL; CI only needs a valid placeholder.
+      # Production builds require VITE_API_URL and a Clerk publishable key. This
+      # step only checks that the app compiles, so placeholders are enough.
       - name: Build
         run: npm run build
         env:
           VITE_API_URL: https://api.example.invalid
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci-placeholder
 
   e2e:
     name: Browser smoke tests

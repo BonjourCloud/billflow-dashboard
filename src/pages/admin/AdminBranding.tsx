@@ -14,7 +14,12 @@ const schema = z.object({
   hero_headline: z.string().trim().min(1).max(120),
   hero_subheadline: z.string().trim().min(1).max(400),
   hero_cta_label: z.string().trim().min(1).max(40),
-  logo_url: z.string().url().nullable().or(z.literal('').transform(() => null)),
+  logo_url: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith('https://'), 'Logo URL must use https.')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
 });
 
 export default function AdminBranding() {

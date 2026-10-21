@@ -9,6 +9,8 @@ import {
   setServerInstanceForTesting,
   resetShutdownStateForTesting,
   mongoose,
+  startServer,
+  describeStartupError,
 } from "../../server/src/index";
 
 describe("S3 Configuration and Initialization Resilience", () => {
@@ -138,5 +140,59 @@ describe("Graceful Shutdown Handler Resilience", () => {
     expect(mockServer.close).toHaveBeenCalledTimes(1);
     expect(mongooseCloseSpy).toHaveBeenCalledTimes(1);
     expect(mongooseCloseSpy).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("Phase 4E — startup failure reporting", () => {
+  const originalUri = process.env.MONGODB_URI;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalUri !== undefined) {
+      process.env.MONGODB_URI = originalUri;
+    } else {
+      delete process.env.MONGODB_URI;
+    }
+  });
+
+  it("includes the error name, message, and cause", () => {
+    const error = Object.assign(new Error("connect ECONNREFUSED"), {
+      cause: Object.assign(new Error("socket closed"), { name: "MongoNetworkError" }),
+    });
+    error.name = "MongoServerSelectionError";
+
+    expect(describeStartupError(error)).toBe(
+      "MongoServerSelectionError: connect ECONNREFUSED (cause: MongoNetworkError: socket closed)",
+    );
+    expect(describeStartupError("plain failure")).toBe("plain failure");
+  });
+
+  it("redacts credentials embedded in MongoDB connection strings", () => {
+    const summary = describeStartupError(
+      new Error(
+        "Invalid URI mongodb+srv://app_user:s3cr3t@cluster0.example.net/billflow and mongodb://root:pw@localhost:27017",
+      ),
+    );
+
+    expect(summary).not.toContain("s3cr3t");
+    expect(summary).not.toContain("root:pw");
+    expect(summary).toContain("mongodb+srv://***@cluster0.example.net/billflow");
+    expect(summary).toContain("mongodb://***@localhost:27017");
+  });
+
+  it("logs the underlying error and exits non-zero when startup fails", async () => {
+    delete process.env.MONGODB_URI;
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as unknown as typeof process.exit);
+
+    await startServer();
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const logged = consoleSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain(
+      "Failed to start BillFlow API: Error: MONGODB_URI is missing from the environment variables.",
+    );
   });
 });

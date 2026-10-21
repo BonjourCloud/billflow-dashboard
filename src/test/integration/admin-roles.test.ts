@@ -127,6 +127,46 @@ describe("Phase 4D — admin role management over HTTP", () => {
     ).toBe(403);
   });
 
+  it("accepts only https logo URLs in branding settings", async () => {
+    const branding = {
+      brand_name: "BillFlow",
+      hero_headline: "Headline",
+      hero_subheadline: "Subheadline",
+      hero_cta_label: "Start",
+    };
+
+    for (const logo_url of [
+      "javascript:alert(1)",
+      "data:image/png;base64,AAAA",
+      "http://cdn.example.com/logo.png",
+      "ftp://cdn.example.com/logo.png",
+      "not a url",
+      "",
+      `https://cdn.example.com/${"a".repeat(2100)}.png`,
+    ]) {
+      const res = await harness.request("PATCH", "/api/admin/branding", {
+        user: OWNER,
+        body: { ...branding, logo_url },
+      });
+      expect(res.status, logo_url.slice(0, 40)).toBe(400);
+    }
+
+    const httpsLogo = "https://billflow.s3.us-east-1.amazonaws.com/branding/logo.png";
+    for (const logo_url of [httpsLogo, null]) {
+      const res = await harness.request("PATCH", "/api/admin/branding", {
+        user: OWNER,
+        body: { ...branding, logo_url },
+      });
+      expect(res.status).toBe(200);
+    }
+
+    const settings = await harness.request<{ logo_url: string | null }>(
+      "GET",
+      "/api/site-settings",
+    );
+    expect(settings.body.logo_url).toBeNull();
+  });
+
   it("lets admins manage pricing tiers while hiding hidden tiers publicly", async () => {
     const created = await harness.request<{ id: string }>(
       "POST",

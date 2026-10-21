@@ -4,6 +4,7 @@ import {
   EnvValidationError,
 } from "../../server/src/config/env";
 import { resolveApiBaseUrl, DEV_API_BASE_URL } from "@/lib/apiBaseUrl";
+import { resolveClerkPublishableKey } from "@/lib/clerkPublishableKey";
 
 const validDevEnv = {
   NODE_ENV: "development",
@@ -201,5 +202,29 @@ describe("Phase 4A — Frontend API base URL resolution", () => {
     expect(() => resolveApiBaseUrl("ftp://api.example.com", false)).toThrowError(
       /absolute http\(s\) URL/,
     );
+  });
+});
+
+describe("Phase 4E — Clerk publishable key validation", () => {
+  it("accepts development and production publishable keys", () => {
+    expect(resolveClerkPublishableKey(" pk_test_abc123 ")).toBe("pk_test_abc123");
+    expect(resolveClerkPublishableKey("pk_live_abc123")).toBe("pk_live_abc123");
+  });
+
+  it("rejects missing keys", () => {
+    expect(() => resolveClerkPublishableKey(undefined)).toThrowError(
+      /Missing VITE_CLERK_PUBLISHABLE_KEY/,
+    );
+    expect(() => resolveClerkPublishableKey("  ")).toThrowError(
+      /Missing VITE_CLERK_PUBLISHABLE_KEY/,
+    );
+  });
+
+  it("rejects secret keys and malformed values", () => {
+    for (const key of ["sk_test_abc123", "pk_abc", "publishable"]) {
+      expect(() => resolveClerkPublishableKey(key)).toThrowError(
+        /must start with pk_test_ or pk_live_/,
+      );
+    }
   });
 });

@@ -1,75 +1,145 @@
 # Deployment & Production Guide
 
-The app is a static SPA — build output is plain HTML/JS/CSS (`dist/`). Any static host works.
+BillFlow deploys as three pieces:
 
-## Build
+| Piece | Where | Config in repo |
+|---|---|---|
+| Frontend (Vite SPA) | Vercel | [`vercel.json`](../vercel.json) |
+| Backend (Express API in `server/`) | Render | [`render.yaml`](../render.yaml) |
+| Database | MongoDB Atlas | — (connection string only) |
 
-```sh
-npm run build      # outputs dist/
-npm run preview    # serve the production build locally
-```
+Authentication uses Clerk, and optional branding-logo uploads use a private AWS S3 bucket.
 
-## Option A — GitHub + Vercel (recommended)
+> **Status:** The configuration below is checked by CI and by tests in this repo (see [TESTING.md](TESTING.md)). A real Vercel/Render deployment, a live Atlas cluster, and Clerk's production API have **not** been exercised from this repository yet; use the post-deploy checklist at the end the first time you deploy.
 
-1. **Push to GitHub.** In Lovable: Plus (+) menu → GitHub → Connect project → Create Repository. Changes sync two-way automatically. Or manually:
-   ```sh
-   git remote add origin <your-repo-url>
-   git push -u origin main
-   ```
-2. **Import in Vercel** → New Project → pick the repo. Vercel auto-detects Vite:
-   - Build command: `npm run build`
-   - Output directory: `dist`
-3. **SPA fallback**: add `vercel.json` so deep links like `/bill/1` don't 404:
-   ```json
-   { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
-   ```
-4. Every push to `main` deploys automatically; PRs get preview deployments.
+## Recommended order
 
-## Option B — Turso (SQLite cloud) as a future data layer
+1. Create the MongoDB Atlas cluster and database user.
+2. Create (or choose) the Clerk instance you will use in production.
+3. Deploy the API to Render. Set `CLIENT_URL` to the frontend URL you intend to use (you can update it after step 4).
+4. Deploy the frontend to Vercel with `VITE_API_URL` pointing at the Render service.
+5. Confirm `CLIENT_URL` on Render exactly matches the Vercel origin, then run the post-deploy checklist.
 
-Turso is a **database**, not a static host — you still deploy the frontend via Vercel/Netlify/AWS. Use Turso when replacing mock state with real persistence:
+## 1. MongoDB Atlas
 
-1. `turso db create billflow` → get URL + auth token.
-2. Add `@libsql/client` and a thin data layer (or Drizzle ORM) replacing `useBillStore`'s mock seed.
-3. Because the app is client-only, direct browser→Turso access exposes the token. Put a small API in front (Vercel serverless functions or a tiny Express/Fastify service) and keep `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` as server-side env vars.
-4. Schema sketch:
-   ```sql
-   CREATE TABLE bills (id TEXT PRIMARY KEY, name TEXT, amount REAL,
-     due_date TEXT, status TEXT, category TEXT, is_subscription INTEGER);
-   CREATE TABLE payments (id TEXT PRIMARY KEY, bill_id TEXT, amount REAL,
-     date TEXT, method TEXT, status TEXT);
-   CREATE TABLE notes (id TEXT PRIMARY KEY, bill_id TEXT, text TEXT, created_at TEXT);
-   ```
+1. Create a cluster. Atlas clusters are replica sets, so installment-plan creation runs inside a MongoDB transaction (the API falls back to a non-transactional path with manual cleanup only on standalone servers).
+2. Create a database user with read/write access to the BillFlow database.
+3. Network access: allow the Render service's outbound IP addresses (listed in the Render dashboard for your service). Allowing `0.0.0.0/0` also works but relies entirely on the database credentials.
+4. Copy the `mongodb+srv://…` connection string, include the database name in the path, and store it only as the `MONGODB_URI` secret on Render.
 
-## Option C — AWS
+On startup the API connects, seeds the default pricing tiers if the collection is empty, and lets Mongoose create the indexes defined in `server/src/models/` (including the unique idempotency-key indexes for payments and installment plans).
 
-**Static hosting (frontend as-is):**
+## 2. Clerk
 
-1. `npm run build`
-2. Create an S3 bucket, upload `dist/`, disable public-access blocking for the bucket (or keep private + OAC).
-3. Put **CloudFront** in front (HTTPS, caching). Set custom error responses: 403/404 → `/index.html` (200) for SPA routing.
-4. Optional: `aws s3 sync dist/ s3://<bucket> --delete` in CI (GitHub Actions) with OIDC credentials.
+- Use the **same** Clerk instance on both sides: `VITE_CLERK_PUBLISHABLE_KEY` (frontend) and `CLERK_PUBLISHABLE_KEY` (backend) must be the same key, and `CLERK_SECRET_KEY` must belong to that instance.
+- For production, create a Clerk production instance (`pk_live_…` / `sk_live_…` keys) and configure your production domain in the Clerk dashboard. Development keys (`pk_test_…` / `sk_test_…`) are accepted by the validation and are fine for staging.
+- The frontend sends the Clerk session token as `Authorization: Bearer …`; the API verifies it with `clerkMiddleware`. No cookies are shared across origins, so CORS does not need credentials.
 
-**With a backend later:** API Gateway + Lambda (Node) + DynamoDB or Aurora Serverless; or App Runner/ECS for a containerized API. Keep the SPA on S3+CloudFront and point the app's data layer at the API URL via an env var.
+## 3. Backend on Render
 
-## CI (GitHub Actions) sketch
+[`render.yaml`](../render.yaml) is a Render Blueprint for a Node web service named `billflow-api`:
 
-```yaml
-name: ci
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm ci
-      - run: npx tsc -b
-      - run: npx vitest run
-      - run: npm run build
-```
+| Setting | Value | Why |
+|---|---|---|
+| `rootDir` | `server` | The API is its own npm package |
+| `buildCommand` | `npm ci --include=dev && npm run build` | `NODE_ENV=production` would otherwise skip TypeScript |
+| `startCommand` | `npm start` (`node dist/index.js`) | |
+| `healthCheckPath` | `/api/ready` | Returns 503 until MongoDB is connected |
+| `plan` | `free` | Free instances sleep when idle — switch to a paid plan for production traffic |
+
+Steps:
+
+1. In Render, create a new **Blueprint** from this repository.
+2. Render prompts for every variable marked `sync: false`. Fill them in (see [Environment Variables](#environment-variables)); leave the optional AWS values empty if you are not using logo uploads.
+3. `PORT` is injected by Render; `NODE_ENV=production`, `NODE_VERSION=24`, `TRUST_PROXY=1`, and `AWS_REGION=us-east-1` are set by the Blueprint.
+
+**The server refuses to start with invalid configuration.** It validates every variable at boot (`server/src/config/env.ts`), prints the variable names that are wrong (never their values), and exits with code 1. If MongoDB is unreachable, startup logs the underlying error (connection-string credentials are redacted) and exits with code 1, so a failed deploy shows up in Render's logs rather than as a silently unhealthy service.
+
+Endpoints useful for operations:
+
+- `GET /api/health` — liveness; always 200 while the process runs, and reports the database state.
+- `GET /api/ready` — readiness; 200 only when MongoDB is connected, otherwise 503.
+
+Both bypass authentication and rate limiting.
+
+### Rate limiting
+
+All `/api` routes are limited to 1000 requests per 15 minutes per signed-in user (or per client IP when signed out). Granting/revoking admin and logo uploads are limited to 30 per 15 minutes. Exceeding a limit returns JSON `429` with standard `RateLimit` headers.
+
+Counters are kept in each instance's memory. With a single instance this is exact; if you scale to several instances, each counts separately (a shared store such as Redis would be needed for global limits). `TRUST_PROXY=1` is required on Render so limits use the real client IP instead of Render's proxy.
+
+### Admin access
+
+- `ADMIN_CLERK_USER_IDS` lists Clerk user IDs (`user_…`) that are always admins. Use it to bootstrap the first admin, then grant others from **Admin → Users**.
+- Bootstrap admins are resolved from the environment on every request; removing an ID removes that person's admin access.
+- Admins granted from the UI are stored in MongoDB and keep access until revoked in the UI. Note: before Phase 4A, signing in as a bootstrap admin also saved `role: "admin"` in MongoDB. If any bootstrap admin signed in before that change, revoke them in **Admin → Users** after removing their ID from the variable.
+
+### Logo uploads (optional)
+
+- Use a **private** S3 bucket. Uploaded logos are stored under `branding/` and displayed through pre-signed URLs that expire after one hour.
+- The IAM credentials need `s3:PutObject` and `s3:GetObject` on `arn:aws:s3:::<bucket>/branding/*`.
+- Without AWS credentials, uploads return `503`; admins can still paste an `https://` logo URL (non-https URLs are rejected).
+
+## 4. Frontend on Vercel
+
+[`vercel.json`](../vercel.json) configures the Vite build (`npm run build` → `dist/`), rewrites all routes to `index.html` so deep links such as `/bill/123` work on reload, caches `/assets/*` immutably (filenames are content-hashed), and adds `X-Content-Type-Options`, `Referrer-Policy`, and `X-Frame-Options` headers.
+
+1. Import the repository in Vercel (project root = repository root).
+2. Set these environment variables for Production (and Preview, if used):
+   - `VITE_API_URL` — the Render service URL, e.g. `https://billflow-api.onrender.com` (no trailing path).
+   - `VITE_CLERK_PUBLISHABLE_KEY` — the Clerk publishable key.
+3. Deploy.
+
+**Production builds fail fast** if `VITE_API_URL` is missing or not an absolute http(s) URL, or if `VITE_CLERK_PUBLISHABLE_KEY` is missing or does not start with `pk_test_`/`pk_live_`. This prevents shipping a bundle that calls `localhost` or cannot start. Use `npm run build:dev` for a development-mode build without these checks.
+
+**Preview deployments:** each Vercel preview has its own origin. The API only allows origins listed in `CLIENT_URL`, so either add the preview origins you need (comma-separated) or expect previews to be blocked by CORS.
 
 ## Environment Variables
 
-None required today (no backend). When auth/persistence lands, use `VITE_`-prefixed vars for client-safe values (e.g. `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) and keep service-role/DB secrets strictly server-side.
+Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CLERK_PUBLISHABLE_KEY`), while database connection strings (`MONGODB_URI`), Clerk secret keys (`CLERK_SECRET_KEY`), and AWS S3 credentials remain strictly server-side.
+
+`VITE_` variables are compiled into the public JavaScript bundle; never put secrets in them. Templates: [`.env.example`](../.env.example) (frontend) and [`server/.env.example`](../server/.env.example) (backend).
+
+### Frontend (Vercel)
+
+| Variable | Required | Notes |
+|---|---|---|
+| `VITE_API_URL` | Production builds | API origin. Development falls back to `http://localhost:5001`. |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Always | `pk_test_…` or `pk_live_…` |
+
+### Backend (Render)
+
+| Variable | Required | Notes |
+|---|---|---|
+| `NODE_ENV` | — | `development` (default), `production`, or `test` |
+| `PORT` | — | Default `5001`; Render injects its own |
+| `CLIENT_URL` | Production | Allowed frontend origin(s), comma-separated, no paths (e.g. `https://billflow.vercel.app`). Defaults to `http://localhost:8080` outside production. |
+| `MONGODB_URI` | Yes | Must start with `mongodb://` or `mongodb+srv://` |
+| `CLERK_SECRET_KEY` | Yes | `sk_test_…` or `sk_live_…` |
+| `CLERK_PUBLISHABLE_KEY` | Yes | Same key as the frontend |
+| `TRUST_PROXY` | — | Proxy hops in front of the API; `0` by default, `1` on Render |
+| `ADMIN_CLERK_USER_IDS` | — | Comma-separated Clerk user IDs (`user_…`) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Must be set together; enable logo uploads |
+| `AWS_REGION` | — | e.g. `us-east-1` |
+| `AWS_S3_BUCKET` | Production, if AWS credentials are set | Bucket for logos |
+
+## CI (GitHub Actions)
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main`, on pull requests, and manually:
+
+- **frontend** — installs both packages, then lint, type-check, unit tests, integration tests (in-memory MongoDB; the binary is cached), and a production build with placeholder `VITE_API_URL`/`VITE_CLERK_PUBLISHABLE_KEY` values (a compile check only).
+- **server** — type-check and build of `server/`.
+- **e2e** — Playwright smoke tests against a production build. Requires the optional repository secret `VITE_CLERK_PUBLISHABLE_KEY` (a Clerk development key is enough). Without it — including on pull requests from forks — the job's steps are skipped with a notice instead of failing.
+
+No other secrets are needed; CI never connects to Atlas, Clerk's Backend API, or S3. Deployment is not triggered by CI: Vercel and Render deploy from the connected branch on their own.
+
+## Post-deploy checklist (manual)
+
+Run these the first time you deploy and after configuration changes:
+
+1. `GET https://<render-service>/api/ready` returns `200` with `"database": "connected"`.
+2. The landing page loads with branding and pricing tiers (no CORS errors in the browser console).
+3. Reloading a deep link such as `/dashboard` serves the app, not a 404.
+4. Sign in with Clerk; the dashboard loads bills without `401` responses.
+5. A bootstrap admin can open `/admin` and see the user list.
+6. If S3 is configured, upload a logo in **Admin → Branding** and confirm it displays after saving.

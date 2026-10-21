@@ -1,48 +1,52 @@
 # BillFlow — Bill Payment & Subscription Management Dashboard
 
-A premium, dark-mode-first dashboard for tracking bills and subscriptions. Built with React, Vite, Tailwind CSS, shadcn/ui, Framer Motion, and Recharts.
-
-> **Current state: pure frontend.** All data is hardcoded mock state held in browser memory — no backend, no database, no auth. See [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) for what is mocked vs. planned.
+A dashboard for tracking bills, subscriptions, and installment plans. React + Vite frontend, Express + MongoDB API, Clerk authentication.
 
 ## Features
 
-- **Bento-grid dashboard** with glassmorphism cards (onyx/slate dark theme, emerald = paid, rose = overdue)
-- **Hero widget** — total spend, paid/pending/overdue breakdown, animated progress bar
-- **Upcoming Bills widget** — next 3 pending bills, urgency-coded
-- **Spending by Category chart** (Recharts) — interactive: click a bar to filter the bill table; click again (or "Clear filter") to reset
-- **AI Insights widget** — placeholder that flags duplicate subscriptions
-- **Bill Hub table** — search, filter by status/category (with reset), sort by due date or amount, add/edit/delete via dialog
-- **Bill Detail page** (`/bill/:id`) — payment history, timestamped notes, summary stats
-- **Add/Edit dialog** — validated form with date picker and subscription toggle
-- All animations capped at 0.3s for a snappy feel
+- **Bills** — one-time and monthly recurring bills, with search, filters, sorting, and category charts
+- **Payments and notes** — record full or partial payments per bill (with duplicate protection) and keep notes
+- **Subscriptions** — recurring series that create monthly bills automatically
+- **Installment plans (EMI)** — schedule, interest, and remaining balance, updated as payments come in
+- **Reminders** — in-app notifications for bills due within 5 days or overdue
+- **Insights** — rule-based spending insights computed in the browser (no AI service)
+- **Landing page** — branding and pricing tiers managed from the admin panel
+- **Admin panel** — users and admin roles, pricing tiers, branding (with optional S3 logo upload), and theme colors and fonts
 
-## Tech Stack
+## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Framework | React 18 + TypeScript 5, Vite 5 |
-| Styling | Tailwind CSS v3, shadcn/ui, semantic design tokens (`src/index.css`) |
-| Animation | Framer Motion (≤ 0.3s durations) |
-| Charts | Recharts |
-| State | Local React state (`useBillStore` hook) — no backend |
-| Routing | React Router (SPA) |
-| Tests | Vitest + jsdom, Playwright |
+| Frontend | React 18, TypeScript, Vite 5, Tailwind CSS, shadcn/ui, Framer Motion, Recharts, TanStack Query |
+| Backend | Node 24, Express 5, Mongoose 9, zod (`server/`) |
+| Database | MongoDB (Atlas in production) |
+| Auth | Clerk |
+| File storage | AWS S3 (optional, branding logos) |
+| Tests | Vitest, mongodb-memory-server, Playwright |
+| Hosting | Vercel (frontend), Render (API) |
 
-## Quick Start
+## Quick start
 
 ```sh
-npm i          # or: bun install
-npm run dev    # http://localhost:8080
+npm ci
+npm ci --prefix server
+cp .env.example .env                 # set VITE_CLERK_PUBLISHABLE_KEY
+cp server/.env.example server/.env   # set MONGODB_URI and the Clerk keys
 ```
+
+Then run the API and the frontend in two terminals:
+
+```sh
+npm run dev --prefix server   # http://localhost:5001
+npm run dev                   # http://localhost:8080
+```
+
+The API refuses to start if required variables are missing or malformed, and prints which ones need fixing.
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical architecture, data flow, file map
-- [docs/DESIGN.md](docs/DESIGN.md) — design system: tokens, colors, layout, motion rules
-- [docs/TESTING.md](docs/TESTING.md) — how to run and write tests locally
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — production via GitHub + Vercel, Turso (SQLite cloud), or AWS
-- [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) — what's mocked, what's real, what's pending (auth, admin panel, persistence)
-
-## Deploy
-
-Click **Publish** in Lovable, or see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for GitHub/Vercel/AWS self-hosting.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system overview, request pipeline, data model, frontend structure
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Vercel, Render, MongoDB Atlas, Clerk, S3, environment variables, CI
+- [docs/TESTING.md](docs/TESTING.md) — test commands and what each suite verifies
+- [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) — which integrations are real and what tests substitute
+- [docs/DESIGN.md](docs/DESIGN.md) — design system: tokens, layout, motion rules

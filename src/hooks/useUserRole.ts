@@ -11,6 +11,9 @@ interface UserRoleResponse {
 
 export function useUserRole() {
   const { user } = useAuth();
+  // AuthProvider rebuilds `user` on every render; key the fetch on the ID so
+  // the role is only reloaded when the signed-in user actually changes.
+  const userId = user?.id ?? null;
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,7 +21,7 @@ export function useUserRole() {
     let cancelled = false;
 
     async function load() {
-      if (!user) {
+      if (!userId) {
         setRoles([]);
         setLoading(false);
         return;
@@ -51,7 +54,7 @@ export function useUserRole() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   return {
     roles,
