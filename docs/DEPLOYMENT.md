@@ -27,13 +27,14 @@ Authentication uses Clerk, and optional branding-logo uploads use a private AWS 
 3. Network access: allow the Render service's outbound IP addresses (listed in the Render dashboard for your service). Allowing `0.0.0.0/0` also works but relies entirely on the database credentials.
 4. Copy the `mongodb+srv://…` connection string, include the database name in the path, and store it only as the `MONGODB_URI` secret on Render.
 
-On startup the API connects, seeds the default pricing tiers if the collection is empty, and lets Mongoose create the indexes defined in `server/src/models/` (including the unique idempotency-key indexes for payments and installment plans).
+On startup the API connects, seeds the default pricing tiers if the collection is empty (only at startup — public reads never write, so tiers an admin deletes stay deleted), and lets Mongoose create the indexes defined in `server/src/models/` (including the unique idempotency-key indexes for payments and installment plans).
 
 ## 2. Clerk
 
 - Use the **same** Clerk instance on both sides: `VITE_CLERK_PUBLISHABLE_KEY` (frontend) and `CLERK_PUBLISHABLE_KEY` (backend) must be the same key, and `CLERK_SECRET_KEY` must belong to that instance.
 - For production, create a Clerk production instance (`pk_live_…` / `sk_live_…` keys) and configure your production domain in the Clerk dashboard. Development keys (`pk_test_…` / `sk_test_…`) are accepted by the validation and are fine for staging.
 - The frontend sends the Clerk session token as `Authorization: Bearer …`; the API verifies it with `clerkMiddleware`. No cookies are shared across origins, so CORS does not need credentials.
+- The API passes the `CLIENT_URL` origins to Clerk as `authorizedParties`. Clerk session tokens carry the origin they were issued to (`azp`); a token issued to any other origin, or without that claim, is treated as signed out. CORS and Clerk therefore use the same origin list.
 
 ## 3. Backend on Render
 
@@ -78,7 +79,8 @@ Counters are kept in each instance's memory. With a single instance this is exac
 
 - Use a **private** S3 bucket. Uploaded logos are stored under `branding/` and displayed through pre-signed URLs that expire after one hour.
 - The IAM credentials need `s3:PutObject` and `s3:GetObject` on `arn:aws:s3:::<bucket>/branding/*`.
-- Without AWS credentials, uploads return `503`; admins can still paste an `https://` logo URL (non-https URLs are rejected).
+- Uploads must be PNG, JPEG, or WebP up to 2 MB. The API checks the file's leading bytes, not just the declared type, and stores the detected content type.
+- Without AWS credentials, valid uploads return `503`; admins can still paste an `https://` logo URL (non-https URLs are rejected).
 
 ## 4. Frontend on Vercel
 
@@ -90,9 +92,9 @@ Counters are kept in each instance's memory. With a single instance this is exac
    - `VITE_CLERK_PUBLISHABLE_KEY` — the Clerk publishable key.
 3. Deploy.
 
-**Production builds fail fast** if `VITE_API_URL` is missing or not an absolute http(s) URL, or if `VITE_CLERK_PUBLISHABLE_KEY` is missing or does not start with `pk_test_`/`pk_live_`. This prevents shipping a bundle that calls `localhost` or cannot start. Use `npm run build:dev` for a development-mode build without these checks.
+**Production builds fail fast** if `VITE_API_URL` is missing, is not an absolute URL, or uses `http://` for anything other than `localhost`, or if `VITE_CLERK_PUBLISHABLE_KEY` is missing or does not start with `pk_test_`/`pk_live_`. This prevents shipping a bundle that calls `localhost` or cannot start. Use `npm run build:dev` for a development-mode build without these checks.
 
-**Preview deployments:** each Vercel preview has its own origin. The API only allows origins listed in `CLIENT_URL`, so either add the preview origins you need (comma-separated) or expect previews to be blocked by CORS.
+**Preview deployments:** each Vercel preview has its own origin. The API only allows origins listed in `CLIENT_URL`, for both CORS and Clerk's authorized parties, so either add the preview origins you need (comma-separated) or expect previews to be blocked.
 
 ## Environment Variables
 
@@ -104,7 +106,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 
 | Variable | Required | Notes |
 |---|---|---|
-| `VITE_API_URL` | Production builds | API origin. Development falls back to `http://localhost:5001`. |
+| `VITE_API_URL` | Production builds | API origin; must be `https://` in production builds (except `localhost`). Development falls back to `http://localhost:5001`. |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Always | `pk_test_…` or `pk_live_…` |
 
 ### Backend (Render)
@@ -113,7 +115,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 |---|---|---|
 | `NODE_ENV` | — | `development` (default), `production`, or `test` |
 | `PORT` | — | Default `5001`; Render injects its own |
-| `CLIENT_URL` | Production | Allowed frontend origin(s), comma-separated, no paths (e.g. `https://billflow.vercel.app`). Defaults to `http://localhost:8080` outside production. |
+| `CLIENT_URL` | Production | Allowed frontend origin(s), comma-separated, no paths (e.g. `https://billflow.vercel.app`). Used for CORS and Clerk's authorized parties. Defaults to `http://localhost:8080` outside production. |
 | `MONGODB_URI` | Yes | Must start with `mongodb://` or `mongodb+srv://` |
 | `CLERK_SECRET_KEY` | Yes | `sk_test_…` or `sk_live_…` |
 | `CLERK_PUBLISHABLE_KEY` | Yes | Same key as the frontend |
@@ -125,7 +127,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 
 ## CI (GitHub Actions)
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main`, on pull requests, and manually:
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and `feature/**` branches, on pull requests, and manually:
 
 - **frontend** — installs both packages, then lint, type-check, unit tests, integration tests (in-memory MongoDB; the binary is cached), and a production build with placeholder `VITE_API_URL`/`VITE_CLERK_PUBLISHABLE_KEY` values (a compile check only).
 - **server** — type-check and build of `server/`.

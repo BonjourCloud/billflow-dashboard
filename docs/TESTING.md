@@ -41,7 +41,9 @@ They cover:
 
 - zod request schemas and model helpers (bills, payments, notes, installments, subscriptions, pricing tiers);
 - recurrence and installment calculations, reminder generation logic, and insight rules;
-- environment validation (server variables, `VITE_API_URL`, the Clerk publishable key);
+- environment validation (server variables, `VITE_API_URL` including https-only production URLs, the Clerk publishable key);
+- Clerk `authorizedParties` with the real `@clerk/express` middleware, using locally signed tokens (`jwtKey`), so Clerk is never contacted;
+- image signature detection for logo uploads;
 - the Express error handler, JSON 404, body-size limits, health/readiness, and the rate limiter, by requesting the real app on a local port;
 - admin helpers and the role endpoint, with Clerk mocked;
 - startup failure reporting and graceful shutdown;
@@ -64,18 +66,21 @@ They verify:
 - every protected route returns JSON `401` without a user, and every `/api/admin/*` route returns `403` for a non-admin (the route list is read from the app, so new routes are covered automatically);
 - users get `404` for each other's bills, payments, notes, installment plans, subscriptions, and notifications, and the other user's data is unchanged;
 - admin grant/revoke, self-revoke and bootstrap-admin protection, losing bootstrap access when removed from `ADMIN_CLERK_USER_IDS`, https-only logo URLs, and hidden pricing tiers;
-- installment plans are created in a transaction and rolled back by MongoDB when inserting bills fails; idempotency keys; partial and full payments updating plan balances; duplicate-payment protection.
+- installment plans are created in a transaction and rolled back by MongoDB when inserting bills fails; idempotency keys; partial and full payments updating plan balances; duplicate-payment protection;
+- logo uploads: real PNG/JPEG/WebP files accepted, non-images and mismatched types rejected with `400`, the 2 MB limit, and the `PutObject` request built (the S3 client is replaced with a stub);
+- public reads (`/api/site-settings`, `/api/pricing-tiers`) don't write to an empty database, and concurrent startup seeding creates each default tier once;
+- Clerk profile sync is cached per user for 15 minutes while role changes apply immediately.
 
-**First run:** `mongodb-memory-server` downloads a MongoDB binary (around 100 MB) into `~/.cache/mongodb-binaries`. Later runs reuse it; CI caches it.
+**First run:** `mongodb-memory-server` downloads a MongoDB binary (around 100 MB) into `node_modules/.cache/mongodb-memory-server/`. Later runs reuse it until `node_modules` is reinstalled. CI skips the install-time download (`MONGOMS_DISABLE_POSTINSTALL=1`) and caches that directory, keyed on `package-lock.json`.
 
 ### Browser smoke tests — `npm run test:e2e`
 
 Playwright (`playwright.config.ts`, specs in `e2e/`). The config builds the production frontend and serves it with `vite preview` on port 4173.
 
-- The API is **not** running. `VITE_API_URL` is set to `http://api.e2e.test` and every request to it is answered inside the browser with fixed JSON (`page.route`).
+- The API is **not** running. `VITE_API_URL` is set to `https://api.e2e.test` and every request to it is answered inside the browser with fixed JSON (`page.route`).
 - Clerk is **real**: the page loads the Clerk instance from `VITE_CLERK_PUBLISHABLE_KEY` (environment or root `.env`). A development key works.
 
-They check that the landing page renders branding and pricing from the API, that signed-out visitors are redirected from `/dashboard` and `/admin/users` to `/login`, that unknown routes show the 404 page, and that no page errors or unexpected API calls occur.
+They check that the landing page renders branding and pricing from the API, that signed-out visitors are redirected from `/dashboard` and `/admin/users` to `/login`, that unknown routes show the 404 page, that the static page metadata and favicons are BillFlow-branded, and that no page errors or unexpected API calls occur.
 
 **First run:** install the browser once with `npx playwright install chromium` (in CI: `npx playwright install --with-deps chromium`).
 
@@ -83,7 +88,7 @@ Signed-in flows are **not** covered by browser tests; they would need a dedicate
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, type-check, unit tests, integration tests, and both builds on every pull request and push to `main`. The Playwright job runs only when the repository secret `VITE_CLERK_PUBLISHABLE_KEY` is set; otherwise it is skipped with a notice. See [DEPLOYMENT.md](DEPLOYMENT.md#ci-github-actions).
+`.github/workflows/ci.yml` runs lint, type-check, unit tests, integration tests, and both builds on every pull request and on pushes to `main` and `feature/**` branches. The Playwright job runs only when the repository secret `VITE_CLERK_PUBLISHABLE_KEY` is set; otherwise it is skipped with a notice. See [DEPLOYMENT.md](DEPLOYMENT.md#ci-github-actions).
 
 ## What no automated test covers
 

@@ -57,7 +57,7 @@ Middleware runs in this order (`server/src/index.ts`):
 3. CORS, allowing only the origins in `CLIENT_URL`
 4. JSON body parsing, limited to 100 kB
 5. `GET /api/health` and `GET /api/ready` (registered here so they skip auth and rate limits)
-6. `clerkMiddleware()` — verifies the Bearer token and sets `req.auth`
+6. `clerkMiddleware()` — verifies the Bearer token (signature, expiry, and that its `azp` is one of the `CLIENT_URL` origins) and sets `req.auth`
 7. Rate limiter for `/api` (per user, falling back to IP)
 8. Route handlers
 9. JSON 404 for unknown routes
@@ -68,7 +68,7 @@ Middleware runs in this order (`server/src/index.ts`):
 - Every non-public handler calls `getAuth(req)` and returns `401` without a user. Public routes: `GET /api/health`, `/api/ready`, `/api/site-settings`, `/api/pricing-tiers` (hidden tiers only for admins).
 - User data is always queried with the caller's `userId`, so another user's ID returns `404`.
 - Admin routes (`/api/admin/*`) call `requireAdminAuth`: a user is an admin if their Clerk ID is in `ADMIN_CLERK_USER_IDS` (checked on every request, never saved) or their `User` document has `role: "admin"` (set only through grant/revoke).
-- `GET /api/users/me` and `GET /api/users/me/role` sync email, name, and avatar from Clerk into the `User` collection.
+- `GET /api/users/me` and `GET /api/users/me/role` copy email, name, and avatar from Clerk into the `User` collection at most once every 15 minutes per user (`profileSyncedAt`). Roles are never cached, so grants, revocations, and `ADMIN_CLERK_USER_IDS` changes apply on the next request.
 
 ### Data model (`server/src/models/`)
 
@@ -105,7 +105,7 @@ The environment is validated when the server module loads (skipped when `NODE_EN
 - **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
 - **API access** (`src/lib/api.ts`): adds `Authorization: Bearer <Clerk token>` unless a call is marked unauthenticated, and turns API JSON errors into thrown `Error`s with the server's message.
 - **Data hooks** (`src/hooks/`): one hook per feature, using TanStack Query or local state over the API. Notifications poll every 60 seconds.
-- **Branding and theme** come from `GET /api/site-settings` and are applied as CSS variables; light/dark preference is stored in `localStorage`.
+- **Branding and theme** come from `GET /api/site-settings` (schema defaults until an admin first saves) and are applied as CSS variables and the document title; light/dark preference is stored in `localStorage`. `index.html` carries static BillFlow metadata for crawlers and link previews.
 - **Insights** (`src/lib/insights.ts`) are computed in the browser from the user's bills, payments, and plans with fixed rules. No AI or LLM service is called.
 
 ## Configuration
