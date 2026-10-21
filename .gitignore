@@ -37,3 +37,9 @@ server/dist/
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
