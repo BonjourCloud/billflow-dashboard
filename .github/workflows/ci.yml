@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
   workflow_dispatch:
 
@@ -31,8 +31,12 @@ jobs:
             package-lock.json
             server/package-lock.json
 
+      # mongodb-memory-server's postinstall would download MongoDB during
+      # `npm ci`, bypassing the cache below; download at test time instead.
       - name: Install frontend dependencies
         run: npm ci
+        env:
+          MONGOMS_DISABLE_POSTINSTALL: "1"
 
       # Backend tests in src/test import server code, which resolves its
       # dependencies (mongoose, express, @clerk/express) from server/node_modules.
@@ -48,12 +52,15 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      # mongodb-memory-server downloads a MongoDB binary on first use.
+      # mongodb-memory-server stores its MongoDB binary in node_modules/.cache
+      # (it prefers that over ~/.cache when node_modules exists). Restore after
+      # `npm ci`, which recreates node_modules; on a miss the integration tests
+      # download the binary and the cache is saved after the job.
       - name: Cache MongoDB binaries
         uses: actions/cache@v4
         with:
-          path: ~/.cache/mongodb-binaries
-          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Integration tests (in-memory MongoDB replica set)
         run: npm run test:integration
@@ -92,6 +99,9 @@ jobs:
       - name: Install dependencies
         if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
         run: npm ci
+        env:
+          # Browser tests don't use MongoDB.
+          MONGOMS_DISABLE_POSTINSTALL: "1"
 
       - name: Install Chromium
         if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
