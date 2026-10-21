@@ -1,6 +1,7 @@
 import { Bill, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
 import { InstallmentPlan } from '@/data/installments';
+import { formatCurrency } from '@/lib/currency';
 
 export interface InsightItem {
   id: string;
@@ -25,12 +26,8 @@ export function parseDateUtc(dateInput: string | Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
 }
 
-export function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+// Re-exported so insight text uses the app-wide INR formatter.
+export { formatCurrency };
 
 export function formatCategory(category: string): string {
   if (!category) return '';

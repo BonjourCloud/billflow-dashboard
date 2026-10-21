@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
 const methodIcon = (m: PaymentRecord['method']) => {
   if (m === 'cash') return <Banknote className="w-4 h-4" />;
@@ -346,9 +347,9 @@ const BillDetail = () => {
         {/* Info Cards Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
-            { icon: Tag, label: 'Amount', value: `$${bill.amount.toFixed(2)}`, color: 'text-foreground' },
+            { icon: Tag, label: 'Amount', value: formatCurrency(bill.amount), color: 'text-foreground' },
             { icon: CalendarDays, label: 'Due Date', value: format(new Date(bill.dueDate), 'MMM dd, yyyy'), color: 'text-muted-foreground' },
-            { icon: TrendingUp, label: 'Total Paid', value: `$${totalPaid.toFixed(2)}`, color: 'status-paid' },
+            { icon: TrendingUp, label: 'Total Paid', value: formatCurrency(totalPaid), color: 'status-paid' },
             { icon: Clock, label: 'Payments', value: `${payments.length} ${payments.length === 1 ? 'record' : 'records'}`, color: 'text-muted-foreground' },
           ].map((item, i) => (
             <motion.div
@@ -429,7 +430,7 @@ const BillDetail = () => {
                             {p.status}
                           </span>
                           <span className="font-mono-data text-sm font-semibold min-w-[70px] text-right">
-                            ${p.amount.toFixed(2)}
+                            {formatCurrency(p.amount)}
                           </span>
                         </motion.div>
                       );
@@ -524,7 +525,7 @@ const BillDetail = () => {
 
             <div className="space-y-1.5">
               <Label htmlFor="payment-amount" className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-                Amount ($)
+                Amount (₹)
               </Label>
               <Input
                 id="payment-amount"

@@ -3,6 +3,7 @@ import { Clock, CalendarDays } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Bill } from '@/data/bills';
 import { differenceInDays } from 'date-fns';
+import { formatCurrency } from '@/lib/currency';
 
 interface UpcomingBillsWidgetProps {
   bills: Bill[];
@@ -52,7 +53,7 @@ export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
                 </div>
               </div>
               <span className="font-mono-data font-semibold text-sm shrink-0">
-                ${bill.amount.toFixed(2)}
+                {formatCurrency(bill.amount)}
               </span>
             </motion.div>
           );

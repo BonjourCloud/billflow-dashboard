@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/api';
 import { usePricingTiers, PricingTier } from '@/hooks/usePricingTiers';
+import { formatPrice } from '@/lib/currency';
 
 const tierSchema = z.object({
   slug: z.string().trim().min(1).max(40).regex(/^[a-z0-9-]+$/, 'lowercase letters, numbers, hyphens'),
@@ -141,7 +142,7 @@ export default function AdminPricing() {
                   {!t.is_visible && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">Hidden</span>}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-mono-data text-foreground">${t.price_monthly}</span>/mo · <span className="font-mono-data">${t.price_yearly}</span>/yr · {t.features.length} features · order {t.sort_order}
+                  <span className="font-mono-data text-foreground">{formatPrice(t.price_monthly)}</span>/mo · <span className="font-mono-data">{formatPrice(t.price_yearly)}</span>/yr · {t.features.length} features · order {t.sort_order}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -165,8 +166,8 @@ export default function AdminPricing() {
               <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Pro" /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Monthly $</Label><Input type="number" value={form.price_monthly} onChange={e => setForm({ ...form, price_monthly: Number(e.target.value) })} /></div>
-              <div><Label>Yearly $</Label><Input type="number" value={form.price_yearly} onChange={e => setForm({ ...form, price_yearly: Number(e.target.value) })} /></div>
+              <div><Label>Monthly ₹</Label><Input type="number" value={form.price_monthly} onChange={e => setForm({ ...form, price_monthly: Number(e.target.value) })} /></div>
+              <div><Label>Yearly ₹</Label><Input type="number" value={form.price_yearly} onChange={e => setForm({ ...form, price_yearly: Number(e.target.value) })} /></div>
               <div>
                 <Label>Period</Label>
                 <Select value={form.billing_period} onValueChange={v => setForm({ ...form, billing_period: v as Form['billing_period'] })}>

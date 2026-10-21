@@ -39,6 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatCurrency } from '@/lib/currency';
 
 function getOrdinalSuffix(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -166,11 +167,7 @@ export default function Subscriptions() {
             </div>
             <div className="mt-4">
               <span className="text-4xl font-bold font-mono-data tracking-tight">
-                $
-                {store.stats.monthlyRunRate.toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(store.stats.monthlyRunRate)}
               </span>
               <p className="text-xs text-muted-foreground mt-1">
                 Committed across {store.stats.activeCount} active recurring services
@@ -194,11 +191,7 @@ export default function Subscriptions() {
             </div>
             <div className="mt-4">
               <span className="text-4xl font-bold font-mono-data tracking-tight">
-                $
-                {store.stats.annualRunRate.toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(store.stats.annualRunRate)}
               </span>
               <p className="text-xs text-muted-foreground mt-1">
                 Estimate based on current active monthly recurring series
@@ -368,7 +361,7 @@ export default function Subscriptions() {
                           {getOrdinalSuffix(sub.recurringDay)})
                         </td>
                         <td className="py-3 font-mono-data text-sm font-semibold">
-                          ${sub.amount.toFixed(2)}
+                          {formatCurrency(sub.amount)}
                           <span className="text-xs text-muted-foreground font-normal">
                             /mo
                           </span>

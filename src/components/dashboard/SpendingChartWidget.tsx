@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Bill } from '@/data/bills';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 
 const CATEGORY_COLORS: Record<string, string> = {
   utilities: 'hsl(217, 91%, 60%)',
@@ -67,7 +68,7 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
               axisLine={false}
               tickLine={false}
               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-              tickFormatter={(v: number) => `$${v}`}
+              tickFormatter={(v: number) => formatCurrencyCompact(v)}
               width={50}
             />
             <Tooltip
@@ -81,7 +82,7 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
               }}
               labelStyle={{ color: 'hsl(var(--card-foreground))', fontWeight: 600, textTransform: 'capitalize' }}
               itemStyle={{ color: 'hsl(var(--muted-foreground))' }}
-              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+              formatter={(value: number) => [formatCurrency(value), 'Amount']}
             />
             <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={48} className="cursor-pointer" onClick={(_: unknown, index: number) => {
               const clicked = data[index].category;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DollarSign, Palette, ImageIcon, Users, ArrowRight } from 'lucide-react';
+import { IndianRupee, Palette, ImageIcon, Users, ArrowRight } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { usePricingTiers } from '@/hooks/usePricingTiers';
@@ -30,7 +30,7 @@ export default function AdminDashboard() {
   }, []);
 
   const cards = [
-    { to: '/admin/pricing', icon: DollarSign, label: 'Pricing tiers', value: `${tiers.length} tiers`, desc: 'Edit Free / Pro / Enterprise plans' },
+    { to: '/admin/pricing', icon: IndianRupee, label: 'Pricing tiers', value: `${tiers.length} tiers`, desc: 'Edit Free / Pro / Enterprise plans' },
     { to: '/admin/branding', icon: ImageIcon, label: 'Branding', value: settings.brand_name, desc: 'Logo, brand name, hero copy' },
     { to: '/admin/theme', icon: Palette, label: 'Theme', value: settings.theme_font_pair, desc: 'Colors and typography' },
   ];

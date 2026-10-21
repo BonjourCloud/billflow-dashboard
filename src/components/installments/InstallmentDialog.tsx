@@ -34,6 +34,7 @@ import {
   UpdateInstallmentPlanInput,
   calculateInstallmentPlanTotals,
 } from '@/data/installments';
+import { formatCurrency } from '@/lib/currency';
 import { CATEGORIES } from '@/data/bills';
 
 interface InstallmentDialogProps {
@@ -301,7 +302,7 @@ export function InstallmentDialog({
               {/* Financial Inputs: Principal & Down Payment */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="principal-amount">Principal Amount ($) *</Label>
+                  <Label htmlFor="principal-amount">Principal Amount (₹) *</Label>
                   <Input
                     id="principal-amount"
                     type="number"
@@ -316,7 +317,7 @@ export function InstallmentDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="down-payment">Down Payment ($)</Label>
+                  <Label htmlFor="down-payment">Down Payment (₹)</Label>
                   <Input
                     id="down-payment"
                     type="number"
@@ -403,32 +404,32 @@ export function InstallmentDialog({
                     <div>
                       <span className="text-muted-foreground">Financed Amount:</span>{' '}
                       <span className="font-semibold font-mono-data">
-                        ${livePreview.totals.financedAmount.toFixed(2)}
+                        {formatCurrency(livePreview.totals.financedAmount)}
                       </span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Total Interest:</span>{' '}
                       <span className="font-semibold font-mono-data text-accent">
-                        ${livePreview.totals.totalInterest.toFixed(2)}
+                        {formatCurrency(livePreview.totals.totalInterest)}
                       </span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Scheduled Total:</span>{' '}
                       <span className="font-bold font-mono-data">
-                        ${livePreview.totals.scheduledTotal.toFixed(2)}
+                        {formatCurrency(livePreview.totals.scheduledTotal)}
                       </span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Per Month:</span>{' '}
                       <span className="font-bold font-mono-data text-primary">
-                        ${livePreview.totals.baseInstallmentAmount.toFixed(2)}
+                        {formatCurrency(livePreview.totals.baseInstallmentAmount)}
                       </span>
                     </div>
                   </div>
 
                   {livePreview.totals.roundingDifference > 0 && (
                     <p className="text-[11px] text-muted-foreground italic">
-                      Final installment will be adjusted by +${livePreview.totals.roundingDifference.toFixed(2)} to exactly match scheduled total.
+                      Final installment will be adjusted by +{formatCurrency(livePreview.totals.roundingDifference)} to exactly match scheduled total.
                     </p>
                   )}
 

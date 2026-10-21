@@ -1,5 +1,6 @@
 import mongoose, { type InferSchemaType } from "mongoose";
 import { z } from "zod";
+import { formatWholeCurrency } from "../services/currency.js";
 
 const pricingTierSchema = new mongoose.Schema(
   {
@@ -171,11 +172,11 @@ export const createPricingTierSchema = z.object({
   price_monthly: z
     .number()
     .min(0, "Monthly price cannot be negative.")
-    .max(99999, "Monthly price cannot exceed $99,999."),
+    .max(99999, `Monthly price cannot exceed ${formatWholeCurrency(99999)}.`),
   price_yearly: z
     .number()
     .min(0, "Yearly price cannot be negative.")
-    .max(999999, "Yearly price cannot exceed $999,999."),
+    .max(999999, `Yearly price cannot exceed ${formatWholeCurrency(999999)}.`),
   billing_period: z.enum(["month", "year", "forever"]),
   cta_label: z
     .string()

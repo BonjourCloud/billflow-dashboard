@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
+import { formatCurrency } from '@/lib/currency';
 
 interface BillTableProps {
   bills: Bill[];
@@ -162,7 +163,7 @@ export function BillTable({
                       </div>
                     </td>
                     <td className="py-3 capitalize text-sm text-muted-foreground">{bill.category}</td>
-                    <td className="py-3 font-mono-data text-sm font-semibold">${bill.amount.toFixed(2)}</td>
+                    <td className="py-3 font-mono-data text-sm font-semibold">{formatCurrency(bill.amount)}</td>
                     <td className="py-3 font-mono-data text-sm text-muted-foreground">{format(new Date(bill.dueDate), 'MMM dd, yyyy')}</td>
                     <td className="py-3">{statusBadge(bill.status)}</td>
                     <td className="py-3 pr-4">

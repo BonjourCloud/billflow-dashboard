@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Landmark,
   Calendar,
-  DollarSign,
   TrendingUp,
   Percent,
   Clock,
@@ -43,6 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatCurrency } from '@/lib/currency';
 
 export default function InstallmentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -260,8 +260,8 @@ export default function InstallmentDetail() {
               />
             </div>
             <div className="flex items-center justify-between text-xs font-mono-data text-muted-foreground pt-1">
-              <span>${plan.totalPaid.toFixed(2)} Paid</span>
-              <span>${plan.remainingBalance.toFixed(2)} Remaining</span>
+              <span>{formatCurrency(plan.totalPaid)} Paid</span>
+              <span>{formatCurrency(plan.remainingBalance)} Remaining</span>
             </div>
           </div>
 
@@ -272,11 +272,11 @@ export default function InstallmentDetail() {
                 Principal Amount
               </span>
               <p className="text-base sm:text-lg font-bold font-mono-data text-foreground">
-                ${plan.principalAmount.toFixed(2)}
+                {formatCurrency(plan.principalAmount)}
               </p>
               {plan.downPayment > 0 && (
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Down payment: -${plan.downPayment.toFixed(2)}
+                  Down payment: {formatCurrency(-plan.downPayment)}
                 </p>
               )}
             </div>
@@ -286,7 +286,7 @@ export default function InstallmentDetail() {
                 Financed Debt
               </span>
               <p className="text-base sm:text-lg font-bold font-mono-data text-foreground">
-                ${plan.financedAmount.toFixed(2)}
+                {formatCurrency(plan.financedAmount)}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Principal - Down Payment
@@ -298,7 +298,7 @@ export default function InstallmentDetail() {
                 Total Interest
               </span>
               <p className="text-base sm:text-lg font-bold font-mono-data text-accent">
-                ${plan.totalInterest.toFixed(2)}
+                {formatCurrency(plan.totalInterest)}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {plan.interestRate > 0 ? `${plan.interestRate}% flat p.a.` : '0% flat interest'}
@@ -310,7 +310,7 @@ export default function InstallmentDetail() {
                 Monthly Payment
               </span>
               <p className="text-base sm:text-lg font-bold font-mono-data text-primary">
-                ${plan.installmentAmount.toFixed(2)}
+                {formatCurrency(plan.installmentAmount)}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {plan.totalInstallments} total months
@@ -375,7 +375,7 @@ export default function InstallmentDetail() {
                     <div className="flex items-center justify-between sm:justify-end gap-4">
                       <div className="text-right">
                         <p className="font-bold font-mono-data text-sm text-foreground">
-                          ${installment.amount.toFixed(2)}
+                          {formatCurrency(installment.amount)}
                         </p>
                         <div className="mt-0.5">
                           {getBillStatusBadge(installment.status)}

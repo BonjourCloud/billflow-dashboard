@@ -100,6 +100,13 @@ test("landing page renders branding and pricing from the API", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Pro" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Go Pro" })).toBeVisible();
 
+  // Prices and stats are shown in Indian Rupees, never dollars.
+  const pricing = page.locator("#pricing");
+  await expect(pricing.getByText("₹0", { exact: true })).toBeVisible();
+  await expect(pricing.getByText("₹9", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹24L", { exact: true })).toBeVisible();
+  expect(await page.locator("body").innerText()).not.toContain("$");
+
   expect(unexpected).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

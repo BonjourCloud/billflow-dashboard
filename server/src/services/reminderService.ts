@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Bill, type BillDocument } from "../models/Bill.js";
 import { Notification, type NotificationDocument } from "../models/Notification.js";
+import { formatCurrency } from "./currency.js";
 
 /**
  * Formats a date into a clean YYYY-MM-DD UTC string
@@ -83,15 +84,12 @@ export function buildDueSoonReminderData(
 
   const relativeText = getUpcomingRelativeText(billDueMidnight, refMidnightUtc);
   const dateStr = formatUtcDateString(d);
-  const amountStr = bill.amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const amountStr = formatCurrency(bill.amount);
 
   return {
     type: "due_soon",
     title: `Payment Due Soon: ${bill.name}`,
-    message: `$${amountStr} ${relativeText} (${dateStr}).`,
+    message: `${amountStr} ${relativeText} (${dateStr}).`,
     billId: bill._id,
     seriesId: bill.seriesId ?? null,
     planId: bill.planId ?? null,
@@ -125,15 +123,12 @@ export function buildOverdueReminderData(
 
   const relativeText = getOverdueRelativeText(billDueMidnight, refMidnightUtc);
   const dateStr = formatUtcDateString(d);
-  const amountStr = bill.amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const amountStr = formatCurrency(bill.amount);
 
   return {
     type: "overdue",
     title: `Payment Overdue: ${bill.name}`,
-    message: `$${amountStr} was due on ${dateStr} (${relativeText}).`,
+    message: `${amountStr} was due on ${dateStr} (${relativeText}).`,
     billId: bill._id,
     seriesId: bill.seriesId ?? null,
     planId: bill.planId ?? null,

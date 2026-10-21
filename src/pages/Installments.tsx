@@ -8,7 +8,7 @@ import {
   Filter,
   X,
   Calendar,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   Percent,
   AlertCircle,
@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { formatCurrency } from '@/lib/currency';
 
 export default function Installments() {
   const navigate = useNavigate();
@@ -174,10 +175,10 @@ export default function Installments() {
           >
             <div className="flex items-center justify-between text-muted-foreground mb-2">
               <span className="text-xs font-medium uppercase tracking-wider">Remaining Balance</span>
-              <DollarSign className="w-4 h-4 text-accent" />
+              <IndianRupee className="w-4 h-4 text-accent" />
             </div>
             <p className="text-2xl font-bold font-mono-data text-foreground">
-              ${store.summaryMetrics.totalRemainingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(store.summaryMetrics.totalRemainingBalance)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Across {store.summaryMetrics.activeCount} active financing plans
@@ -196,7 +197,7 @@ export default function Installments() {
               <Clock className="w-4 h-4 text-primary" />
             </div>
             <p className="text-2xl font-bold font-mono-data text-foreground">
-              ${store.summaryMetrics.monthlyCommitment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(store.summaryMetrics.monthlyCommitment)}
               <span className="text-sm font-normal text-muted-foreground">/mo</span>
             </p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -216,7 +217,7 @@ export default function Installments() {
               <TrendingUp className="w-4 h-4 text-emerald-500" />
             </div>
             <p className="text-2xl font-bold font-mono-data text-emerald-500">
-              ${store.summaryMetrics.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(store.summaryMetrics.totalPaid)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Recorded payments across all plans
@@ -414,8 +415,8 @@ export default function Installments() {
                           />
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono-data">
-                          <span>${plan.totalPaid.toFixed(2)} paid</span>
-                          <span>${plan.scheduledTotal.toFixed(2)} total</span>
+                          <span>{formatCurrency(plan.totalPaid)} paid</span>
+                          <span>{formatCurrency(plan.scheduledTotal)} total</span>
                         </div>
                       </div>
 
@@ -424,14 +425,14 @@ export default function Installments() {
                         <div>
                           <p className="text-muted-foreground">Monthly Payment</p>
                           <p className="font-semibold font-mono-data text-foreground mt-0.5">
-                            ${plan.installmentAmount.toFixed(2)}
+                            {formatCurrency(plan.installmentAmount)}
                             <span className="text-[10px] font-normal text-muted-foreground"> /mo</span>
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Remaining Balance</p>
                           <p className="font-semibold font-mono-data text-foreground mt-0.5">
-                            ${plan.remainingBalance.toFixed(2)}
+                            {formatCurrency(plan.remainingBalance)}
                           </p>
                         </div>
                         <div>

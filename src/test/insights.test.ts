@@ -132,7 +132,7 @@ describe('Insights Engine — Overdue Bill Calculations & Paid Exclusion', () =>
 
     expect(overdueInsight).toBeDefined();
     expect(overdueInsight?.type).toBe('warning');
-    expect(overdueInsight?.text).toContain('2 overdue bills totaling $166.00');
+    expect(overdueInsight?.text).toContain('2 overdue bills totaling ₹166.00');
   });
 
   it('uses singular wording when exactly one bill is overdue', () => {
@@ -151,7 +151,7 @@ describe('Insights Engine — Overdue Bill Calculations & Paid Exclusion', () =>
     const insights = calculateInsights(singleOverdue, DETERMINISTIC_REF_DATE);
     const overdueInsight = insights.find((i) => i.id === 'overdue-bills');
 
-    expect(overdueInsight?.text).toContain('1 overdue bill totaling $65.00');
+    expect(overdueInsight?.text).toContain('1 overdue bill totaling ₹65.00');
     expect(overdueInsight?.text).toContain('Settle it promptly');
   });
 });
@@ -235,7 +235,7 @@ describe('Insights Engine — Upcoming Due-Date Boundaries (5-Day Window)', () =
 
     expect(upcomingInsight).toBeDefined();
     expect(upcomingInsight?.type).toBe('info');
-    expect(upcomingInsight?.text).toContain('3 bills are due in the next 5 days, totaling $180.00');
+    expect(upcomingInsight?.text).toContain('3 bills are due in the next 5 days, totaling ₹180.00');
   });
 
   it('handles single upcoming bill grammar', () => {
@@ -254,7 +254,7 @@ describe('Insights Engine — Upcoming Due-Date Boundaries (5-Day Window)', () =
     const insights = calculateInsights(singleUpcoming, DETERMINISTIC_REF_DATE);
     const upcomingInsight = insights.find((i) => i.id === 'upcoming-bills-5d');
 
-    expect(upcomingInsight?.text).toContain('1 bill is due in the next 5 days, totaling $35.00');
+    expect(upcomingInsight?.text).toContain('1 bill is due in the next 5 days, totaling ₹35.00');
   });
 });
 
@@ -309,7 +309,7 @@ describe('Insights Engine — Dominant Spending Category Calculations', () => {
 
     const insights = calculateInsights(bills, DETERMINISTIC_REF_DATE);
     const dominantInsight = insights.find((i) => i.id === 'dominant-category');
-    expect(dominantInsight?.text).toContain('Housing accounts for 91% ($2,200.00) of your total tracked expenses');
+    expect(dominantInsight?.text).toContain('Housing accounts for 91% (₹2,200.00) of your total tracked expenses');
   });
 
   it('returns null when top category is below 40% threshold (evenly distributed spending)', () => {
@@ -329,7 +329,7 @@ describe('Insights Engine — Dominant Spending Category Calculations', () => {
       { _id: '2', name: 'Rent', amount: 200, dueDate: '2026-10-11', status: 'paid', category: 'housing', isSubscription: false },
       { _id: '3', name: 'Coffee', amount: 10, dueDate: '2026-10-12', status: 'paid', category: 'entertainment', isSubscription: false },
     ];
-    // Utilities and Housing are tied at $200 (48.8% each)
+    // Utilities and Housing are tied at ₹200 (48.8% each)
     expect(getDominantCategory(bills)).toBeNull();
   });
 
@@ -416,14 +416,14 @@ describe('Insights Engine — Unsupported Subscription Claims Guardrails', () =>
   it('still generates valid upcoming bills and dominant category from recurring bill occurrences', () => {
     const insights = calculateInsights(recurringBillsSample, DETERMINISTIC_REF_DATE);
 
-    // Spotify ($16.99) is due Oct 22 (day 3), which is within the 5-day window from Oct 19
+    // Spotify (₹16.99) is due Oct 22 (day 3), which is within the 5-day window from Oct 19
     const upcoming = insights.find((i) => i.id === 'upcoming-bills-5d');
     expect(upcoming).toBeDefined();
-    expect(upcoming?.text).toContain('1 bill is due in the next 5 days, totaling $16.99');
+    expect(upcoming?.text).toContain('1 bill is due in the next 5 days, totaling ₹16.99');
 
-    // Software ($40.00) is 40 / 79.98 = 50% (> 40% threshold, >= 3 bills)
+    // Software (₹40.00) is 40 / 79.98 = 50% (> 40% threshold, >= 3 bills)
     const dominant = insights.find((i) => i.id === 'dominant-category');
     expect(dominant).toBeDefined();
-    expect(dominant?.text).toContain('Software accounts for 50% ($40.00)');
+    expect(dominant?.text).toContain('Software accounts for 50% (₹40.00)');
   });
 });

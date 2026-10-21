@@ -152,7 +152,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
     expect(notificationsDb[0].planId).toBe('plan-auto-1');
     expect(notificationsDb[0].type).toBe('due_soon');
     expect(notificationsDb[0].title).toBe('Payment Due Soon: Auto Loan (1/12)');
-    expect(notificationsDb[0].message).toBe('$350.00 is due in 2 days (2026-10-22).');
+    expect(notificationsDb[0].message).toBe('₹350.00 is due in 2 days (2026-10-22).');
     expect(notificationsDb[0].amount).toBe(350);
   });
 
@@ -174,7 +174,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
     const reminder = buildDueSoonReminderData(bill, refMidnight);
     expect(reminder.type).toBe('due_soon');
     expect(reminder.title).toBe('Payment Due Soon: Car Loan EMI (3/12)');
-    expect(reminder.message).toBe('$450.50 is due tomorrow (2026-10-21).');
+    expect(reminder.message).toBe('₹450.50 is due tomorrow (2026-10-21).');
     expect(reminder.billId).toBe('inst-1');
     expect(reminder.planId).toBe('plan-car');
     expect(reminder.amount).toBe(450.5);
@@ -198,7 +198,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
     const reminder = buildOverdueReminderData(bill, refMidnight);
     expect(reminder.type).toBe('overdue');
     expect(reminder.title).toBe('Payment Overdue: Laptop Loan EMI (1/6)');
-    expect(reminder.message).toBe('$200.00 was due on 2026-10-18 (2 days overdue).');
+    expect(reminder.message).toBe('₹200.00 was due on 2026-10-18 (2 days overdue).');
     expect(reminder.billId).toBe('inst-overdue');
     expect(reminder.planId).toBe('plan-laptop');
     expect(reminder.amount).toBe(200);
@@ -257,7 +257,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
       userId: 'user_alice',
       type: 'due_soon',
       title: 'Payment Due Soon: Phone EMI (1/6)',
-      message: '$150.00 is due tomorrow (2026-10-21).',
+      message: '₹150.00 is due tomorrow (2026-10-21).',
       billId: 'inst-1',
       planId: 'plan-1',
       dueDate: new Date('2026-10-21T00:00:00.000Z'),
@@ -285,7 +285,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
       userId: 'user_alice',
       type: 'due_soon',
       title: 'Payment Due Soon: Phone EMI (1/6)',
-      message: '$150.00 is due today (2026-10-01).',
+      message: '₹150.00 is due today (2026-10-01).',
       billId: 'inst-paid-1',
       planId: 'plan-1',
       dueDate: new Date('2026-10-01T00:00:00.000Z'),
@@ -300,7 +300,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
       userId: 'user_alice',
       type: 'due_soon',
       title: 'Payment Due Soon: Phone EMI (2/6)',
-      message: '$150.00 is due in 3 days (2026-11-01).',
+      message: '₹150.00 is due in 3 days (2026-11-01).',
       billId: 'inst-unpaid-2',
       planId: 'plan-1',
       dueDate: new Date('2026-11-01T00:00:00.000Z'),
@@ -324,7 +324,7 @@ describe('Phase 3D — Reminders Integration & Stale Notification Purging', () =
       userId: 'user_alice',
       type: 'due_soon',
       title: 'Payment Due Soon: Alice Loan (1/12)',
-      message: '$200.00 is due today.',
+      message: '₹200.00 is due today.',
       billId: 'inst-alice-1',
       planId: 'plan-alice',
       dueDate: new Date('2026-10-20T00:00:00.000Z'),
@@ -420,7 +420,7 @@ describe('Phase 3D — Paid Total Aggregation & Legacy Fallback Safeguards', () 
       },
     ];
 
-    // Partial completed payment of $200 against $500 bill
+    // Partial completed payment of ₹200 against ₹500 bill
     const payments: PaymentRecord[] = [
       {
         _id: 'pay-part-1',
@@ -544,7 +544,7 @@ describe('Phase 3D — Paid Total Aggregation & Legacy Fallback Safeguards', () 
       },
     ];
 
-    // Has a completed payment record of $300
+    // Has a completed payment record of ₹300
     const payments: PaymentRecord[] = [
       {
         _id: 'pay-hybrid',
@@ -577,7 +577,7 @@ describe('Phase 3D — Paid Total Aggregation & Legacy Fallback Safeguards', () 
       },
     ];
 
-    // Customer overpaid $60 on a $50 bill
+    // Customer overpaid ₹60 on a ₹50 bill
     const payments: PaymentRecord[] = [
       {
         _id: 'pay-over',
@@ -777,13 +777,13 @@ describe('Phase 3D — Dashboard Insights & Double-Counting Safeguards', () => {
   it('identifies upcoming bills including pending installment bills and excluding paid ones', () => {
     const upcoming = getUpcomingBills(sampleBills, REF_DATE, 5);
     // Upcoming pending within [Oct 20, Oct 25]:
-    // - bill-electric ($140, Oct 23)
-    // - bill-netflix ($20, Oct 24)
-    // - bill-car-2 ($590, Oct 24)
+    // - bill-electric (₹140, Oct 23)
+    // - bill-netflix (₹20, Oct 24)
+    // - bill-car-2 (₹590, Oct 24)
     // Paid bill-car-1 is EXCLUDED
     // Future bill-car-3 (Nov 24) is EXCLUDED
     expect(upcoming.count).toBe(3);
-    expect(upcoming.totalAmount).toBe(140 + 20 + 590); // $750
+    expect(upcoming.totalAmount).toBe(140 + 20 + 590); // ₹750
     const ids = upcoming.bills.map((b) => b._id);
     expect(ids).toContain('bill-electric');
     expect(ids).toContain('bill-netflix');
@@ -808,8 +808,8 @@ describe('Phase 3D — Dashboard Insights & Double-Counting Safeguards', () => {
     expect(financingInsight).toBeDefined();
     expect(financingInsight?.type).toBe('info');
     expect(financingInsight?.text).toContain('1 active installment plan');
-    expect(financingInsight?.text).toContain('$20,060.00 remaining balance');
-    expect(financingInsight?.text).toContain('$590.00/mo commitment');
+    expect(financingInsight?.text).toContain('₹20,060.00 remaining balance');
+    expect(financingInsight?.text).toContain('₹590.00/mo commitment');
   });
 });
 
@@ -821,7 +821,7 @@ describe('Phase 3D — Payment Synchronization & Partial Payment Invariants', ()
     let billStatus: 'pending' | 'paid' = 'pending';
     const billAmount = 200;
 
-    // Partial payment of $80 against $200 bill
+    // Partial payment of ₹80 against ₹200 bill
     const partialPayment = 80;
     planTotalPaid += partialPayment;
     planBalance = Math.max(0, scheduledTotal - planTotalPaid);
@@ -834,7 +834,7 @@ describe('Phase 3D — Payment Synchronization & Partial Payment Invariants', ()
     expect(planTotalPaid).toBe(80);
     expect(planBalance).toBe(1120);
 
-    // Remaining payment of $120 completes the bill
+    // Remaining payment of ₹120 completes the bill
     const remainingPayment = 120;
     planTotalPaid += remainingPayment;
     planBalance = Math.max(0, scheduledTotal - planTotalPaid);
@@ -901,7 +901,7 @@ describe('Phase 3D — Date Boundaries, Month-End Clamping & Leap Year Rules', (
   });
 
   it('reconciles exact scheduled total with final installment rounding adjustment', () => {
-    // $10,000 across 7 months at 0%
+    // ₹10,000 across 7 months at 0%
     const totals = calculateInstallmentPlanTotals({
       principalAmount: 10000,
       totalInstallments: 7,
