@@ -47,6 +47,10 @@ const pricingTiers = [
   },
 ];
 
+// Redirects for signed-out visitors wait for Clerk's script to load from the
+// real Clerk instance, which regularly takes 3–5 s; allow for that latency.
+const CLERK_LOAD_TIMEOUT = 20_000;
+
 async function mockApi(page: Page) {
   const unexpected: string[] = [];
   await page.route(`${E2E_API_URL}/**`, async (route) => {
@@ -108,7 +112,7 @@ test("signed-out visitors are redirected from the dashboard to login", async ({
 
   await page.goto("/dashboard");
 
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login$/, { timeout: CLERK_LOAD_TIMEOUT });
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   expect(unexpected).toEqual([]);
   expect(pageErrors).toEqual([]);
@@ -119,7 +123,7 @@ test("signed-out visitors cannot open the admin panel", async ({ page }) => {
 
   await page.goto("/admin/users");
 
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login$/, { timeout: CLERK_LOAD_TIMEOUT });
 });
 
 test("page metadata and favicon are BillFlow-branded", async ({ page, request }) => {
