@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 4173;
 // Never resolved: every request to it is answered by page.route() mocks in
 // the specs, so the smoke tests need no backend or database.
-export const E2E_API_URL = "http://api.e2e.test";
+export const E2E_API_URL = "https://api.e2e.test";
 
 export default defineConfig({
   testDir: "./e2e",

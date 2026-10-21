@@ -195,6 +195,41 @@ describe("Phase 4A — Frontend API base URL resolution", () => {
     );
   });
 
+  it("requires https in production except for a local API", () => {
+    for (const url of [
+      "http://api.example.com",
+      "http://billflow-api.onrender.com",
+      "http://localhost.example.com",
+      "http://10.0.0.5:5001",
+    ]) {
+      expect(() => resolveApiBaseUrl(url, true), url).toThrowError(/must use https/);
+    }
+    expect(resolveApiBaseUrl("https://billflow-api.onrender.com", true)).toBe(
+      "https://billflow-api.onrender.com",
+    );
+    for (const url of [
+      "http://localhost:5001",
+      "http://127.0.0.1:5001",
+      "http://[::1]:5001",
+    ]) {
+      expect(resolveApiBaseUrl(url, true)).toBe(url);
+    }
+  });
+
+  it("allows http APIs outside production", () => {
+    expect(resolveApiBaseUrl("http://api.example.com", false)).toBe(
+      "http://api.example.com",
+    );
+  });
+
+  it("rejects malformed URLs and unsupported protocols", () => {
+    for (const url of ["https://", "http//api.example.com", "javascript:alert(1)", "ws://api.example.com"]) {
+      expect(() => resolveApiBaseUrl(url, true), url).toThrowError(
+        /absolute http\(s\) URL/,
+      );
+    }
+  });
+
   it("rejects relative or non-http URLs", () => {
     expect(() => resolveApiBaseUrl("api.example.com", true)).toThrowError(
       /absolute http\(s\) URL/,

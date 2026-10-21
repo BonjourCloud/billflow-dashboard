@@ -21,6 +21,17 @@ export interface Harness {
     path: string,
     options?: { user?: string | null; body?: unknown },
   ): Promise<TestResponse<T>>;
+  /** Sends a multipart/form-data upload with a single file field. */
+  upload<T = unknown>(
+    path: string,
+    options: {
+      user?: string | null;
+      field: string;
+      filename: string;
+      contentType: string;
+      bytes: Uint8Array;
+    },
+  ): Promise<TestResponse<T>>;
   resetDatabase(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -77,6 +88,40 @@ export async function startHarness(): Promise<Harness> {
         method,
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+      const text = await response.text();
+      let body: unknown = text;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        // Non-JSON body; keep the raw text so assertions can show it.
+      }
+      return { status: response.status, body: body as T };
+    },
+
+    async upload<T>(
+      path: string,
+      options: {
+        user?: string | null;
+        field: string;
+        filename: string;
+        contentType: string;
+        bytes: Uint8Array;
+      },
+    ): Promise<TestResponse<T>> {
+      const form = new FormData();
+      form.append(
+        options.field,
+        new Blob([options.bytes], { type: options.contentType }),
+        options.filename,
+      );
+      const headers: Record<string, string> = {};
+      if (options.user) headers[TEST_USER_HEADER] = options.user;
+
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        body: form,
       });
       const text = await response.text();
       let body: unknown = text;

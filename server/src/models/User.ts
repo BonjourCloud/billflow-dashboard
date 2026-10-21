@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema(
       default: "user",
       required: true,
     },
+    // When the profile fields above were last copied from Clerk.
+    profileSyncedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

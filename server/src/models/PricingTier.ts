@@ -132,11 +132,25 @@ export const DEFAULT_PRICING_TIERS = [
   },
 ];
 
+/**
+ * Seeds the default tiers into an empty collection. Upserting by the unique
+ * slug keeps concurrent callers (e.g. two instances starting together) from
+ * inserting duplicates or failing; existing tiers are never modified.
+ */
 export async function seedPricingTiersIfEmpty(): Promise<void> {
   const count = await PricingTier.countDocuments();
-  if (count === 0) {
-    await PricingTier.insertMany(DEFAULT_PRICING_TIERS);
-  }
+  if (count > 0) return;
+
+  await PricingTier.bulkWrite(
+    DEFAULT_PRICING_TIERS.map((tier) => ({
+      updateOne: {
+        filter: { slug: tier.slug },
+        update: { $setOnInsert: tier },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
 }
 
 export const createPricingTierSchema = z.object({

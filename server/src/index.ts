@@ -49,6 +49,7 @@ import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { getS3Client, s3Bucket, isS3Configured } from "./config/s3.js";
+import { detectImageType, IMAGE_EXTENSIONS } from "./services/imageSignature.js";
 import multer from "multer";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const app = express();
@@ -148,12 +149,33 @@ app.get("/api/ready", (_req, res) => {
   });
 });
 
+/**
+ * Clerk options for the API. `authorizedParties` makes Clerk reject session
+ * tokens whose `azp` (the origin the token was issued to) is not one of the
+ * frontend origins — the same validated list CORS allows — so tokens minted
+ * for other apps on the same Clerk instance are treated as signed out.
+ */
+export function buildClerkMiddlewareOptions(config: {
+  publishableKey: string;
+  secretKey: string;
+  authorizedOrigins: string[];
+}) {
+  return {
+    publishableKey: config.publishableKey,
+    secretKey: config.secretKey,
+    authorizedParties: [...config.authorizedOrigins],
+  };
+}
+
 if (clerkPublishableKey && clerkSecretKey) {
   app.use(
-    clerkMiddleware({
-      publishableKey: clerkPublishableKey,
-      secretKey: clerkSecretKey,
-    }),
+    clerkMiddleware(
+      buildClerkMiddlewareOptions({
+        publishableKey: clerkPublishableKey,
+        secretKey: clerkSecretKey,
+        authorizedOrigins: CLIENT_ORIGINS,
+      }),
+    ),
   );
 }
 
@@ -193,6 +215,50 @@ const sensitiveRateLimiter = createRateLimiter({
   limit: 30,
 });
 
+// Profile fields (email, name, avatar) are copied from Clerk at most once per
+// TTL per user. Roles are never cached: isUserAdmin() reads the environment and
+// MongoDB on every request, so grants, revocations, and ADMIN_CLERK_USER_IDS
+// changes take effect immediately.
+export const PROFILE_SYNC_TTL_MS = 15 * 60 * 1000;
+
+export async function syncUserProfile(userId: string): Promise<void> {
+  const existing = await User.findOne({ clerkUserId: userId })
+    .select("profileSyncedAt")
+    .lean();
+  const lastSynced = existing?.profileSyncedAt
+    ? new Date(existing.profileSyncedAt).getTime()
+    : 0;
+  if (Date.now() - lastSynced < PROFILE_SYNC_TTL_MS) return;
+
+  const clerkUser = await clerkClient.users.getUser(userId);
+  const email =
+    clerkUser.emailAddresses.find(
+      (item) => item.id === clerkUser.primaryEmailAddressId,
+    )?.emailAddress ?? "";
+  const rawDisplayName = [clerkUser.firstName, clerkUser.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const displayName = rawDisplayName ? rawDisplayName.slice(0, 120) : null;
+
+  // Sync profile fields only. The stored role changes solely through the
+  // grant/revoke admin endpoints; bootstrap admins are resolved from
+  // ADMIN_CLERK_USER_IDS at request time so removing an ID revokes access.
+  await User.findOneAndUpdate(
+    { clerkUserId: userId },
+    {
+      $set: {
+        email,
+        displayName,
+        avatarUrl: clerkUser.imageUrl,
+        profileSyncedAt: new Date(),
+      },
+      $setOnInsert: { clerkUserId: userId },
+    },
+    { upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+}
+
 app.get("/api/users/me", async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -201,27 +267,8 @@ app.get("/api/users/me", async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
 
-    const clerkUser = await clerkClient.users.getUser(userId);
-    const email =
-      clerkUser.emailAddresses.find(
-        (item) => item.id === clerkUser.primaryEmailAddressId,
-      )?.emailAddress ?? "";
-
-    const user = await User.findOneAndUpdate(
-      { clerkUserId: userId },
-      {
-        $set: {
-          email,
-          displayName: [clerkUser.firstName, clerkUser.lastName]
-            .filter(Boolean)
-            .join(" "),
-          avatarUrl: clerkUser.imageUrl,
-        },
-        $setOnInsert: { clerkUserId: userId },
-      },
-      { new: true, upsert: true, runValidators: true },
-    ).lean();
-
+    await syncUserProfile(userId);
+    const user = await User.findOne({ clerkUserId: userId }).lean();
 
     return res.status(200).json(user);
   } catch (error) {
@@ -283,34 +330,7 @@ export async function currentUserRoleHandler(
     }
 
     const role = (await isUserAdmin(userId)) ? "admin" : "user";
-
-    const clerkUser = await clerkClient.users.getUser(userId);
-    const email =
-      clerkUser.emailAddresses.find(
-        (item) => item.id === clerkUser.primaryEmailAddressId,
-      )?.emailAddress ?? "";
-
-    const rawDisplayName = [clerkUser.firstName, clerkUser.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    const displayName = rawDisplayName ? rawDisplayName.slice(0, 120) : null;
-
-    // Sync profile fields only. The stored role changes solely through the
-    // grant/revoke admin endpoints; bootstrap admins are resolved from
-    // ADMIN_CLERK_USER_IDS at request time so removing an ID revokes access.
-    await User.findOneAndUpdate(
-      { clerkUserId: userId },
-      {
-        $set: {
-          email,
-          displayName,
-          avatarUrl: clerkUser.imageUrl,
-        },
-        $setOnInsert: { clerkUserId: userId },
-      },
-      { upsert: true, runValidators: true, setDefaultsOnInsert: true },
-    );
+    await syncUserProfile(userId);
 
     return res.status(200).json({ role });
   } catch (error) {
@@ -323,21 +343,11 @@ app.get("/api/users/me/role", currentUserRoleHandler);
 
 app.get("/api/site-settings", async (_req, res) => {
   try {
-    const settings = await SiteSettings.findOneAndUpdate(
-      { settingsId: "default" },
-      { $setOnInsert: { settingsId: "default" } },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      },
-    ).lean();
-
-    if (!settings) {
-      return res.status(500).json({
-        error: "Failed to load site settings.",
-      });
-    }
+    // Read-only: until an admin saves settings, serve the schema defaults
+    // without creating the document (admin PATCH routes upsert it).
+    const stored = await SiteSettings.findOne({ settingsId: "default" }).lean();
+    const settings =
+      stored ?? new SiteSettings({ settingsId: "default" }).toObject();
 
     // Keep logo_url as the permanent stored URL. Generate a temporary URL
     // separately because the S3 bucket is private.
@@ -643,8 +653,7 @@ app.get("/api/admin/summary", async (req, res) => {
 
 app.get("/api/pricing-tiers", async (req, res) => {
   try {
-    await seedPricingTiersIfEmpty();
-
+    // Default tiers are seeded once at startup (startServer), not on reads.
     const includeHidden = req.query.includeHidden === "true";
     let showAll = false;
 
@@ -947,31 +956,38 @@ app.post(
   upload.single("logo"),
   async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Please select a valid logo image." });
+    }
+
+    // The multer filter only sees the client-declared MIME type; confirm the
+    // bytes really are that image format before storing them.
+    const detectedType = detectImageType(req.file.buffer);
+    if (!detectedType) {
+      return res.status(400).json({
+        error: "File is not a valid PNG, JPEG, or WebP image.",
+      });
+    }
+    if (detectedType !== req.file.mimetype) {
+      return res.status(400).json({
+        error: "File contents do not match its declared image type.",
+      });
+    }
+
     if (!isS3Configured()) {
       return res.status(503).json({
         error: "AWS S3 storage is not configured. Cannot upload branding logo.",
       });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: "Please select a valid logo image." });
-    }
-
-    const extensionByType: Record<string, string> = {
-      "image/png": "png",
-      "image/jpeg": "jpg",
-      "image/webp": "webp",
-    };
-
-    const extension = extensionByType[req.file.mimetype];
-    const key = `branding/${randomUUID()}.${extension}`;
+    const key = `branding/${randomUUID()}.${IMAGE_EXTENSIONS[detectedType]}`;
 
     await getS3Client().send(
       new PutObjectCommand({
         Bucket: s3Bucket,
         Key: key,
         Body: req.file.buffer,
-        ContentType: req.file.mimetype,
+        ContentType: detectedType,
         CacheControl: "private, max-age=3600",
       }),
     );
