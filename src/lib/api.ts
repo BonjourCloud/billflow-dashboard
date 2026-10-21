@@ -1,6 +1,10 @@
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5001";
+import { resolveApiBaseUrl } from "./apiBaseUrl";
+
+const API_BASE_URL = resolveApiBaseUrl(
+  import.meta.env.VITE_API_URL,
+  import.meta.env.PROD,
+);
 
 type TokenProvider = () => Promise<string | null>;
 

@@ -4,6 +4,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { connectDB } from "./config/db.js";
+import {
+  EnvValidationError,
+  validateServerEnv,
+  type ServerEnv,
+} from "./config/env.js";
 import { User } from "./models/User.js";
 import { Bill, isValidBillId, type BillDocument } from "./models/Bill.js";
 import {
@@ -47,6 +52,13 @@ import multer from "multer";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const app = express();
 
+export class UnsupportedFileTypeError extends Error {
+  constructor() {
+    super("Only PNG, JPEG, and WebP images are allowed.");
+    this.name = "UnsupportedFileTypeError";
+  }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -56,14 +68,29 @@ const upload = multer({
   fileFilter: (_req, file, callback) => {
     const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
     if (!allowedTypes.includes(file.mimetype)) {
-      callback(new Error("Only PNG, JPEG, and WebP images are allowed."));
+      callback(new UnsupportedFileTypeError());
       return;
     }
     callback(null, true);
   },
 });
-const PORT = Number(process.env.PORT) || 5001;
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:8080";
+function loadServerEnv(): ServerEnv {
+  try {
+    return validateServerEnv();
+  } catch (error) {
+    if (error instanceof EnvValidationError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+// Validate configuration at boot so a misconfigured deploy fails immediately
+// instead of serving requests that can never succeed (e.g. CORS-blocked).
+const serverEnv = process.env.NODE_ENV === "test" ? null : loadServerEnv();
+const PORT = serverEnv?.PORT ?? (Number(process.env.PORT) || 5001);
+const CLIENT_ORIGINS = serverEnv?.CLIENT_ORIGINS ?? ["http://localhost:8080"];
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { SiteSettings } from "./models/SiteSettings.js";
 import {
@@ -74,18 +101,13 @@ import {
 } from "./models/PricingTier.js";
 
 app.use(helmet());
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors({ origin: CLIENT_ORIGINS }));
 app.use(express.json({ limit: "100kb" }));
-const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY;
-const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-
-if (!clerkPublishableKey || !clerkSecretKey) {
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error(
-      "Missing CLERK_PUBLISHABLE_KEY or CLERK_SECRET_KEY in server/.env",
-    );
-  }
-}
+// Outside tests, validateServerEnv() has already guaranteed both keys exist.
+const clerkPublishableKey =
+  serverEnv?.CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY;
+const clerkSecretKey =
+  serverEnv?.CLERK_SECRET_KEY ?? process.env.CLERK_SECRET_KEY;
 
 if (clerkPublishableKey && clerkSecretKey) {
   app.use(
@@ -182,7 +204,10 @@ async function requireAdminAuth(
   return userId;
 }
 
-app.get("/api/users/me/role", async (req, res) => {
+export async function currentUserRoleHandler(
+  req: express.Request,
+  res: express.Response,
+) {
   try {
     const { userId } = getAuth(req);
 
@@ -204,6 +229,9 @@ app.get("/api/users/me/role", async (req, res) => {
       .trim();
     const displayName = rawDisplayName ? rawDisplayName.slice(0, 120) : null;
 
+    // Sync profile fields only. The stored role changes solely through the
+    // grant/revoke admin endpoints; bootstrap admins are resolved from
+    // ADMIN_CLERK_USER_IDS at request time so removing an ID revokes access.
     await User.findOneAndUpdate(
       { clerkUserId: userId },
       {
@@ -211,7 +239,6 @@ app.get("/api/users/me/role", async (req, res) => {
           email,
           displayName,
           avatarUrl: clerkUser.imageUrl,
-          role,
         },
         $setOnInsert: { clerkUserId: userId },
       },
@@ -223,7 +250,9 @@ app.get("/api/users/me/role", async (req, res) => {
     console.error("Failed to load user role:", error);
     return res.status(500).json({ error: "Failed to load user role." });
   }
-});
+}
+
+app.get("/api/users/me/role", currentUserRoleHandler);
 
 app.get("/api/site-settings", async (_req, res) => {
   try {
@@ -2209,6 +2238,66 @@ app.patch("/api/notifications/:id/dismiss", async (req, res) => {
     return res.status(500).json({ error: "Failed to dismiss notification." });
   }
 });
+
+// ──────────────────────────────────────────────
+// Fallback 404 and error handling (must be registered after all routes)
+// ──────────────────────────────────────────────
+
+export function notFoundHandler(
+  _req: express.Request,
+  res: express.Response,
+): void {
+  res.status(404).json({ error: "Route not found." });
+}
+
+export function apiErrorHandler(
+  err: unknown,
+  _req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({ error: "Logo image must be 2 MB or smaller." });
+      return;
+    }
+    res.status(400).json({ error: "Invalid file upload." });
+    return;
+  }
+
+  if (err instanceof UnsupportedFileTypeError) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+
+  // body-parser (express.json) errors carry a `type` and an HTTP status.
+  const httpErr = err as { type?: string; status?: number; statusCode?: number };
+  if (httpErr?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Malformed JSON request body." });
+    return;
+  }
+  if (httpErr?.type === "entity.too.large") {
+    res.status(413).json({ error: "Request body is too large." });
+    return;
+  }
+
+  const status = httpErr?.status ?? httpErr?.statusCode;
+  if (typeof status === "number" && status >= 400 && status < 500) {
+    res.status(status).json({ error: "Invalid request." });
+    return;
+  }
+
+  console.error("Unhandled API error:", err);
+  res.status(500).json({ error: "Internal server error." });
+}
+
+app.use(notFoundHandler);
+app.use(apiErrorHandler);
 
 let server: ReturnType<typeof app.listen> | null = null;
 let isShuttingDown = false;
