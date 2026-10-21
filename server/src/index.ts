@@ -21,6 +21,7 @@ import { Payment, paymentCreateSchema, isValidPaymentId } from "./models/Payment
 import { BillNote, noteCreateSchema } from "./models/BillNote.js";
 import {
   generateRemindersForUser,
+  convertLegacyReminderCurrency,
   markNotificationRead,
   markAllNotificationsRead,
   dismissNotification,
@@ -2228,7 +2229,10 @@ app.get("/api/notifications", async (req, res) => {
     // 2. Materialize any due reminders idempotently
     await generateRemindersForUser(userId);
 
-    // 3. Query active (non-dismissed) notifications
+    // 3. Show reminders saved before the rupee change in rupees too
+    await convertLegacyReminderCurrency(userId);
+
+    // 4. Query active (non-dismissed) notifications
     const filter: Record<string, unknown> = {
       userId,
       isDismissed: false,

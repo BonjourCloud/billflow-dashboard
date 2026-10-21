@@ -86,7 +86,8 @@ Atlas (network access, performance), real Clerk sign-in and token verification, 
 
 ### Known limitations
 
-- Currency is displayed in rupees; stored amounts were not converted. Reminder messages created before the rupee change still contain `$` in the database.
+- Currency is displayed in rupees; stored amounts were not converted (a value entered as 5000 dollars now shows as ₹5,000.00). Reminder messages saved before the rupee change are rewritten to rupees, same amount, the next time that user loads their notifications; nothing else about them changes.
+- Seeded pricing tiers keep their original numbers (Pro 9, Enterprise 29), which now display as ₹9 and ₹29. Adjust them in Admin → Pricing if they were meant as dollar prices.
 - Rate limits are counted per server instance.
 - Render's Blueprint uses the free plan, which sleeps when idle.
 - No error tracking, alerting, Content-Security-Policy on the frontend, or Atlas backup configuration yet.

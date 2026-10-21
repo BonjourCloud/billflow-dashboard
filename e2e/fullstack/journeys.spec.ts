@@ -40,6 +40,12 @@ async function expectNoHorizontalOverflow(page: Page, where: string) {
   expect(overflow, `${where} scrolls horizontally by ${overflow}px`).toBeLessThanOrEqual(1);
 }
 
+// Money is shown in rupees everywhere; no visible text may contain "$".
+async function expectNoDollarSign(page: Page, where: string) {
+  const text = await page.locator("body").innerText();
+  expect(text, `${where} shows a "$"`).not.toContain("$");
+}
+
 function trackPageErrors(page: Page) {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -53,6 +59,7 @@ test("signs in from the landing page and signs out", async ({ page }, testInfo) 
 
   await page.goto("/");
   await expectNoHorizontalOverflow(page, "landing");
+  await expectNoDollarSign(page, "landing");
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByRole("button", { name: "Continue with Google" }).click();
@@ -60,6 +67,7 @@ test("signs in from the landing page and signs out", async ({ page }, testInfo) 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText("Monthly Flow")).toBeVisible();
   await expectNoHorizontalOverflow(page, "dashboard");
+  await expectNoDollarSign(page, "dashboard");
 
   await page.getByTitle("Sign out").click();
   await expect(page).toHaveURL(/\/$/);
@@ -85,10 +93,12 @@ test("creates a bill and records a payment", async ({ page }, testInfo) => {
   await expect(row).toBeVisible();
   await expect(page.getByText("₹1,499.00").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "dashboard with a bill");
+  await expectNoDollarSign(page, "dashboard with a bill");
 
   await row.click();
   await expect(page).toHaveURL(/\/bill\/[0-9a-f]{24}$/);
   await expectNoHorizontalOverflow(page, "bill detail");
+  await expectNoDollarSign(page, "bill detail");
 
   await page.getByRole("button", { name: "Record Payment" }).first().click();
   const payment = page.getByRole("dialog");
@@ -121,6 +131,7 @@ test("adds and cancels a recurring subscription", async ({ page }, testInfo) => 
   await expect(page.getByText("Music Premium").first()).toBeVisible();
   await expect(page.getByText("₹119.00").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "subscriptions");
+  await expectNoDollarSign(page, "subscriptions");
 
   await page.getByTitle("Cancel subscription").first().click();
   const confirm = page.getByRole("alertdialog");
@@ -148,6 +159,7 @@ test("creates an installment plan and views its schedule", async ({ page }, test
 
   await expect(page.getByText("Phone EMI").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "installments");
+  await expectNoDollarSign(page, "installments");
 
   await page.getByRole("heading", { name: "Phone EMI", level: 3 }).click();
   await expect(page).toHaveURL(/\/installments\/[0-9a-f]{24}$/);
@@ -158,6 +170,7 @@ test("creates an installment plan and views its schedule", async ({ page }, test
   }
   await expect(page.getByRole("link", { name: "View / Pay" })).toHaveCount(6);
   await expectNoHorizontalOverflow(page, "installment detail");
+  await expectNoDollarSign(page, "installment detail");
   expect(errors).toEqual([]);
 });
 
@@ -179,6 +192,7 @@ test("shows reminders and marks them read", async ({ page, request }, testInfo) 
   await bell.click();
   await expect(page.getByText("Payment Due Soon: Water bill")).toBeVisible();
   await expect(page.getByText(/₹640\.00 is due tomorrow/)).toBeVisible();
+  await expectNoDollarSign(page, "notifications panel");
   await page.getByRole("button", { name: "Mark all read" }).click();
   await expect(page.getByRole("button", { name: /Notifications \(0 unread\)/ })).toBeVisible();
   expect(errors).toEqual([]);
@@ -198,13 +212,16 @@ test("lets an admin manage users and pricing", async ({ page }) => {
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin$/);
   await expectNoHorizontalOverflow(page, "admin dashboard");
+  await expectNoDollarSign(page, "admin dashboard");
 
   await page.goto("/admin/users");
   await expect(page.getByText("e2e_admin@e2e.test").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "admin users");
+  await expectNoDollarSign(page, "admin users");
 
   await page.goto("/admin/pricing");
   await expect(page.getByText("₹0").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "admin pricing");
+  await expectNoDollarSign(page, "admin pricing");
   expect(errors).toEqual([]);
 });

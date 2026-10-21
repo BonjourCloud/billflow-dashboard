@@ -125,3 +125,25 @@ describe('server-generated currency text (INR)', () => {
     expect(messages.join(' ')).not.toContain('$');
   });
 });
+
+describe('legacy reminder messages', () => {
+  it.each([
+    ['$350.00 is due in 2 days (2026-10-22).', '₹350.00 is due in 2 days (2026-10-22).'],
+    ['$1,499.00 is due tomorrow (2026-10-21).', '₹1,499.00 is due tomorrow (2026-10-21).'],
+    ['$210,759.00 was due on 2026-10-18 (2 days overdue).', '₹2,10,759.00 was due on 2026-10-18 (2 days overdue).'],
+    ['$12,345,678.90 is due today (2026-10-20).', '₹1,23,45,678.90 is due today (2026-10-20).'],
+  ])('converts %s', (legacy, expected) => {
+    expect(reminders.toRupeeReminderMessage(legacy)).toBe(expected);
+  });
+
+  it.each([
+    '₹350.00 is due in 2 days (2026-10-22).',
+    'Pay the $350.00 invoice',
+    '$abc is due',
+    '$350 is due tomorrow',
+    '$350.00is due',
+    '',
+  ])('leaves %j unchanged', (message) => {
+    expect(reminders.toRupeeReminderMessage(message)).toBeNull();
+  });
+});

@@ -87,7 +87,7 @@ Request bodies are validated strictly: unknown fields (including `userId`) are r
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/api/notifications?status=unread` | user | Creates missing reminders first: one `due_soon` (due within 5 days) and one `overdue` per bill |
+| GET | `/api/notifications?status=unread` | user | Creates missing reminders first: one `due_soon` (due within 5 days) and one `overdue` per bill. Also rewrites the caller's reminders saved with a leading `$` amount to rupees (message text only). |
 | GET | `/api/notifications/unread-count` | user | `{ count }` |
 | PATCH | `/api/notifications/:id/read` | user | |
 | PATCH | `/api/notifications/read-all` | user | `{ success, updatedCount }` |

@@ -296,6 +296,53 @@ export async function generateRemindersForUser(
   return { createdCount };
 }
 
+// Reminders created before the rupee change were stored as text starting with
+// a US-formatted amount, e.g. "$210,759.00 was due on ...".
+const LEGACY_DOLLAR_AMOUNT = /^\$(\d{1,3}(?:,\d{3})*\.\d{2})(?=\s)/;
+
+/**
+ * Rewrites a legacy reminder message to start with the same amount in rupees
+ * ("₹2,10,759.00 was due on ..."). Returns null when the message has no
+ * leading dollar amount, so already-converted text is never touched.
+ */
+export function toRupeeReminderMessage(message: string): string | null {
+  const match = LEGACY_DOLLAR_AMOUNT.exec(message);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  return formatCurrency(amount) + message.slice(match[0].length);
+}
+
+/**
+ * Converts the user's stored reminder messages that still start with a dollar
+ * amount. Only the message text changes: read/dismissed state, timestamps, and
+ * every other field are left as they were, and nothing is deleted. Safe to run
+ * repeatedly and concurrently.
+ */
+export async function convertLegacyReminderCurrency(userId: string): Promise<number> {
+  const legacy = await Notification.find({ userId, message: { $regex: /^\$\d/ } })
+    .select("_id message")
+    .lean();
+
+  const updates = legacy.flatMap((notification) => {
+    const message = toRupeeReminderMessage(notification.message);
+    if (!message) return [];
+    return [
+      {
+        updateOne: {
+          // Matching the old text keeps a concurrent conversion from applying twice.
+          filter: { _id: notification._id, userId, message: notification.message },
+          update: { $set: { message } },
+          timestamps: false,
+        },
+      },
+    ];
+  });
+
+  if (updates.length === 0) return 0;
+  const result = await Notification.bulkWrite(updates, { ordered: false });
+  return result.modifiedCount;
+}
+
 /**
  * Marks a single notification as read with tenant isolation.
  */
