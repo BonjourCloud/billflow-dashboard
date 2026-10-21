@@ -645,7 +645,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
     expect(plansDb).toHaveLength(1);
     expect(billsDb).toHaveLength(5);
 
-    const plan = res.data.plan;
+    const plan = res.data!.plan;
     expect(plan.financedAmount).toBe(10000);
     expect(plan.totalInstallments).toBe(5);
     expect(plan.scheduledTotal).toBe(10000);
@@ -653,7 +653,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
     expect(plan.remainingBalance).toBe(10000);
     expect(plan.status).toBe("active");
 
-    const bills = res.data.installments;
+    const bills = res.data!.installments;
     expect(bills).toHaveLength(5);
 
     // Verify individual installment bills
@@ -686,7 +686,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
 
     const res = simulateCreateInstallmentPlan(USER_ALICE, payload);
     expect(res.status).toBe(201);
-    const bills = res.data.installments;
+    const bills = res.data!.installments;
 
     // Jan 31 -> Feb 28 (non-leap 2026) -> Mar 31
     expect(bills[0].dueDate.getUTCDate()).toBe(31);
@@ -707,7 +707,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 4,
       startDate: "2026-11-01",
     });
-    const planAliceId = createAlice.data.plan._id;
+    const planAliceId = createAlice.data!.plan._id;
 
     // Bob cannot view Alice's plan
     const getRes = simulateGetInstallmentPlanById(USER_BOB, planAliceId);
@@ -737,7 +737,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 3,
       startDate: "2026-11-01",
     });
-    const planId = createRes.data.plan._id;
+    const planId = createRes.data!.plan._id;
 
     // Pay the 1st installment
     const firstBill = billsDb.find((b) => b.planId === planId && b.installmentNumber === 1)!;
@@ -772,7 +772,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 4,
       startDate: "2026-11-01",
     });
-    const planId = createRes.data.plan._id;
+    const planId = createRes.data!.plan._id;
 
     // Pay 1st installment ($300)
     const bill1 = billsDb.find((b) => b.planId === planId && b.installmentNumber === 1)!;
@@ -808,7 +808,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 2,
       startDate: "2026-11-01",
     });
-    const planId = createRes.data.plan._id;
+    const planId = createRes.data!.plan._id;
     const plan = plansDb.find((p) => p._id === planId)!;
 
     const bill1 = billsDb.find((b) => b.planId === planId && b.installmentNumber === 1)!;
@@ -852,7 +852,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       startDate: "2026-11-01",
     });
     // Pay off p2
-    const p2Bills = billsDb.filter((b) => b.planId === p2.data.plan._id);
+    const p2Bills = billsDb.filter((b) => b.planId === p2.data!.plan._id);
     simulatePayInstallmentBill(USER_ALICE, p2Bills[0]._id, 100);
     simulatePayInstallmentBill(USER_ALICE, p2Bills[1]._id, 100);
 
@@ -862,7 +862,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 2,
       startDate: "2026-11-01",
     });
-    simulateCancelInstallmentPlan(USER_ALICE, p3.data.plan._id);
+    simulateCancelInstallmentPlan(USER_ALICE, p3.data!.plan._id);
 
     // Check filters
     const allPlans = simulateGetInstallmentPlans(USER_ALICE).data;
@@ -870,15 +870,15 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
 
     const activePlans = simulateGetInstallmentPlans(USER_ALICE, "active").data;
     expect(activePlans).toHaveLength(1);
-    expect(activePlans[0].name).toBe("Active Plan");
+    expect(activePlans![0].name).toBe("Active Plan");
 
     const completedPlans = simulateGetInstallmentPlans(USER_ALICE, "completed").data;
     expect(completedPlans).toHaveLength(1);
-    expect(completedPlans[0].name).toBe("To Complete Plan");
+    expect(completedPlans![0].name).toBe("To Complete Plan");
 
     const cancelledPlans = simulateGetInstallmentPlans(USER_ALICE, "cancelled").data;
     expect(cancelledPlans).toHaveLength(1);
-    expect(cancelledPlans[0].name).toBe("To Cancel Plan");
+    expect(cancelledPlans![0].name).toBe("To Cancel Plan");
   });
 
   it("rejects duplicate plan creation with same idempotency key with 409 Conflict", () => {
@@ -938,7 +938,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 3,
       startDate: "2026-11-01",
     });
-    const installmentBill = billsDb.find((b) => b.planId === createRes.data.plan._id)!;
+    const installmentBill = billsDb.find((b) => b.planId === createRes.data!.plan._id)!;
 
     // Direct modification via generic PATCH endpoint rejected with 400
     const patchRes = simulatePatchBill(USER_ALICE, installmentBill._id, { amount: 999 });
@@ -970,7 +970,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 4,
       startDate: "2026-11-01",
     });
-    const installmentBill = billsDb.find((b) => b.planId === createRes.data.plan._id)!;
+    const installmentBill = billsDb.find((b) => b.planId === createRes.data!.plan._id)!;
 
     // 3. Deleting installment bill directly rejected with 400
     const deleteInstallmentRes = simulateDeleteBill(USER_ALICE, installmentBill._id);
@@ -992,7 +992,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 3,
       startDate: "2026-11-01",
     });
-    const planId = createRes.data.plan._id;
+    const planId = createRes.data!.plan._id;
     const planBills = billsDb.filter((b) => b.planId === planId);
 
     // Pay installment #1
@@ -1036,7 +1036,7 @@ describe("Phase 3B — Simulated Route Handlers & Business Logic", () => {
       totalInstallments: 2,
       startDate: "2026-11-01",
     });
-    const planId = createRes.data.plan._id;
+    const planId = createRes.data!.plan._id;
     const planBills = billsDb.filter((b) => b.planId === planId);
 
     // Pay installment #1 ($200)

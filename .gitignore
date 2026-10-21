@@ -34,3 +34,6 @@ server/.env.*
 # Backend generated files
 server/node_modules/
 server/dist/
+
+# TypeScript build info
+*.tsbuildinfo

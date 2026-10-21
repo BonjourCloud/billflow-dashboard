@@ -467,7 +467,7 @@ export default function Installments() {
           onOpenChange={setDialogOpen}
           plan={editingPlan}
           onSave={store.createPlan}
-          onUpdate={store.updatePlan}
+          onUpdate={(id, updates) => store.updatePlan({ id, updates })}
           isPending={store.isCreating || store.isUpdating}
         />
       </div>

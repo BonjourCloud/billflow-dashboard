@@ -105,7 +105,7 @@ describe("Graceful Shutdown Handler Resilience", () => {
     // Spy on mongoose.connection.close
     const mongooseCloseSpy = vi
       .spyOn(mongoose.connection, "close")
-      .mockResolvedValue(undefined as unknown as typeof mongoose);
+      .mockResolvedValue(undefined);
 
     // stopServer should reject with the server error, but crucially STILL close MongoDB
     await expect(stopServer()).rejects.toThrow("Simulated HTTP server close failure");
@@ -131,7 +131,7 @@ describe("Graceful Shutdown Handler Resilience", () => {
 
     const mongooseCloseSpy = vi
       .spyOn(mongoose.connection, "close")
-      .mockResolvedValue(undefined as unknown as typeof mongoose);
+      .mockResolvedValue(undefined);
 
     await expect(stopServer()).resolves.toBeUndefined();
 

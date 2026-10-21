@@ -240,7 +240,7 @@ describe("Iteration 2 Hardening — Ownership Enforcement & Auth Rules", () => {
     const res = simulateFindOne("user_alice", "507f1f77bcf86cd799439011");
     expect(res.status).toBe(200);
     if ("data" in res) {
-      expect(res.data.name).toBe("Alice's Internet");
+      expect(res.data!.name).toBe("Alice's Internet");
     }
   });
 });

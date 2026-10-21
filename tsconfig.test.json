@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    // Backend tests import server code, and Mongoose's types require
+    // strictNullChecks to resolve query filters correctly.
+    "strictNullChecks": true
+  },
+  "include": ["src/test", "src/vite-env.d.ts"],
+  "exclude": []
+}

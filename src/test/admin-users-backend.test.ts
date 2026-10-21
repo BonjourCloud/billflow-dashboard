@@ -5,7 +5,10 @@ import {
   requireAdminAuth,
   getBootstrapAdminIds,
 } from "../../server/src/index";
-import type { Request, Response } from "express";
+
+// Derive Express types from the helper; express is a backend-only dependency.
+type Request = Parameters<typeof requireAdminAuth>[0];
+type Response = Parameters<typeof requireAdminAuth>[1];
 
 const clerkAuthBrand = Symbol.for("@clerk/express.auth");
 

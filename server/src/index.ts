@@ -1548,7 +1548,21 @@ app.post("/api/installments", async (req, res) => {
     const startMonth = parsed.data.startDate.getUTCMonth();
 
     // Generate the finite schedule template of N installment Bill documents
-    const installmentBillsData = [];
+    const installmentBillsData: Array<
+      Pick<
+        BillDocument,
+        | "userId"
+        | "name"
+        | "amount"
+        | "dueDate"
+        | "status"
+        | "category"
+        | "isSubscription"
+        | "recurrenceType"
+        | "installmentNumber"
+        | "totalInstallments"
+      >
+    > = [];
     for (let k = 1; k <= parsed.data.totalInstallments; k++) {
       const monthOffset = k - 1;
       const currentMonthTotal = startMonth + monthOffset;
