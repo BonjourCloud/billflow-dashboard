@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import { connectDB } from "./config/db.js";
 import {
   EnvValidationError,
@@ -100,6 +101,9 @@ import {
   updatePricingTierSchema,
 } from "./models/PricingTier.js";
 
+// Number of reverse-proxy hops to trust for req.ip (e.g. 1 on Render). Left at
+// 0 by default so clients cannot spoof X-Forwarded-For to dodge rate limits.
+app.set("trust proxy", serverEnv?.TRUST_PROXY ?? 0);
 app.use(helmet());
 app.use(cors({ origin: CLIENT_ORIGINS }));
 app.use(express.json({ limit: "100kb" }));
@@ -108,6 +112,41 @@ const clerkPublishableKey =
   serverEnv?.CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY;
 const clerkSecretKey =
   serverEnv?.CLERK_SECRET_KEY ?? process.env.CLERK_SECRET_KEY;
+
+const MONGO_READY_STATES: Record<number, string> = {
+  0: "disconnected",
+  1: "connected",
+  2: "connecting",
+  3: "disconnecting",
+};
+
+function databaseState(): string {
+  return MONGO_READY_STATES[mongoose.connection.readyState] ?? "unknown";
+}
+
+// Health endpoints are registered before auth and rate limiting so platform
+// probes are never throttled or rejected.
+
+// Liveness: the process is up and serving requests.
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "BillFlow API",
+    database: databaseState(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Readiness: only report ready when MongoDB is connected, so the host does not
+// route traffic to an instance that cannot serve it.
+app.get("/api/ready", (_req, res) => {
+  const database = databaseState();
+  const ready = mongoose.connection.readyState === 1;
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "unavailable",
+    database,
+  });
+});
 
 if (clerkPublishableKey && clerkSecretKey) {
   app.use(
@@ -118,12 +157,40 @@ if (clerkPublishableKey && clerkSecretKey) {
   );
 }
 
-app.get("/api/health", (_req, res) => {
-  res.status(200).json({
-    status: "ok",
-    service: "BillFlow API",
-    timestamp: new Date().toISOString(),
+// Rate limit per signed-in user, falling back to client IP. Runs after Clerk
+// so authenticated users behind a shared IP get independent budgets.
+function rateLimitKey(req: express.Request): string {
+  try {
+    const { userId } = getAuth(req);
+    if (userId) return `user:${userId}`;
+  } catch {
+    // No Clerk middleware (tests) or unauthenticated request.
+  }
+  return `ip:${ipKeyGenerator(req.ip ?? "unknown")}`;
+}
+
+export function createRateLimiter(options: { windowMs: number; limit: number }) {
+  return rateLimit({
+    windowMs: options.windowMs,
+    limit: options.limit,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    handler: (_req, res, _next, limiterOptions) => {
+      res
+        .status(limiterOptions.statusCode)
+        .json({ error: "Too many requests. Please try again later." });
+    },
   });
+}
+
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+// Generous general budget; the dashboard polls notifications once a minute.
+app.use("/api", createRateLimiter({ windowMs: FIFTEEN_MINUTES_MS, limit: 1000 }));
+// Tighter budget for admin privilege changes and S3 uploads.
+const sensitiveRateLimiter = createRateLimiter({
+  windowMs: FIFTEEN_MINUTES_MS,
+  limit: 30,
 });
 
 app.get("/api/users/me", async (req, res) => {
@@ -417,7 +484,7 @@ app.get("/api/admin/users", async (req, res) => {
   }
 });
 
-app.post("/api/admin/users/:id/grant-admin", async (req, res) => {
+app.post("/api/admin/users/:id/grant-admin", sensitiveRateLimiter, async (req, res) => {
   try {
     const adminUserId = await requireAdminAuth(req, res);
     if (!adminUserId) return;
@@ -487,7 +554,7 @@ app.post("/api/admin/users/:id/grant-admin", async (req, res) => {
   }
 });
 
-app.post("/api/admin/users/:id/revoke-admin", async (req, res) => {
+app.post("/api/admin/users/:id/revoke-admin", sensitiveRateLimiter, async (req, res) => {
   try {
     const adminUserId = await requireAdminAuth(req, res);
     if (!adminUserId) return;
@@ -860,6 +927,7 @@ app.patch("/api/admin/site-settings", async (req, res) => {
 
 app.post(
   "/api/admin/branding/logo",
+  sensitiveRateLimiter,
   async (req, res, next) => {
     const adminUserId = await requireAdminAuth(req, res);
     if (!adminUserId) return;

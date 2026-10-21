@@ -103,6 +103,17 @@ describe("Phase 4A — Server environment validation", () => {
     }
   });
 
+  it("defaults TRUST_PROXY to 0 and accepts a hop count", () => {
+    expect(validateServerEnv(validDevEnv).TRUST_PROXY).toBe(0);
+    expect(validateServerEnv({ ...validDevEnv, TRUST_PROXY: "1" }).TRUST_PROXY).toBe(1);
+    expect(issuesFor({ ...validDevEnv, TRUST_PROXY: "yes" }).join("\n")).toMatch(
+      /TRUST_PROXY/,
+    );
+    expect(issuesFor({ ...validDevEnv, TRUST_PROXY: "-1" }).join("\n")).toMatch(
+      /TRUST_PROXY/,
+    );
+  });
+
   it("rejects invalid PORT and NODE_ENV values", () => {
     expect(issuesFor({ ...validDevEnv, PORT: "abc" }).join("\n")).toMatch(/PORT/);
     expect(issuesFor({ ...validDevEnv, PORT: "70000" }).join("\n")).toMatch(/PORT/);

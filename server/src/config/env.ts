@@ -26,6 +26,8 @@ const serverEnvSchema = z
       .enum(["development", "production", "test"])
       .default("development"),
     PORT: z.coerce.number().int().min(1).max(65535).default(5001),
+    // Reverse-proxy hops in front of the API (1 on Render). 0 trusts none.
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
     CLIENT_URL: optionalString,
     MONGODB_URI: z
       .string({ error: "MONGODB_URI is required." })
