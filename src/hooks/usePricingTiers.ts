@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 
 export interface PricingTier {
   id: string;
@@ -22,23 +22,25 @@ export function usePricingTiers(opts?: { includeHidden?: boolean }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('pricing_tiers').select('*').order('sort_order', { ascending: true });
-    if (!opts?.includeHidden) q = q.eq('is_visible', true);
-    const { data, error } = await q;
-    if (!error && data) {
-      setTiers(
-        data.map((t: any) => ({
-          ...t,
-          features: Array.isArray(t.features) ? t.features : [],
-          price_monthly: Number(t.price_monthly),
-          price_yearly: Number(t.price_yearly),
-        }))
-      );
+    try {
+      const url = opts?.includeHidden
+        ? '/api/pricing-tiers?includeHidden=true'
+        : '/api/pricing-tiers';
+      const data = await apiRequest<PricingTier[]>(url, {
+        authenticated: Boolean(opts?.includeHidden),
+      });
+      setTiers(data ?? []);
+    } catch (error) {
+      console.error('Failed to load pricing tiers:', error);
+      setTiers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [opts?.includeHidden]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return { tiers, loading, refresh: load };
 }

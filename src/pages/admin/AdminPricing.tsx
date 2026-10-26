@@ -9,8 +9,9 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { usePricingTiers, PricingTier } from '@/hooks/usePricingTiers';
+import { formatPrice } from '@/lib/currency';
 
 const tierSchema = z.object({
   slug: z.string().trim().min(1).max(40).regex(/^[a-z0-9-]+$/, 'lowercase letters, numbers, hyphens'),
@@ -65,35 +66,56 @@ export default function AdminPricing() {
     const payload = { ...form, features: featuresText.split('\n').map(s => s.trim()).filter(Boolean) };
     const parsed = tierSchema.safeParse(payload);
     if (!parsed.success) {
-      toast.error(parsed.error.errors[0].message);
+      toast.error(parsed.error.issues?.[0]?.message || 'Invalid pricing tier data.');
       return;
     }
     setSaving(true);
-    if (editing) {
-      const { error } = await supabase.from('pricing_tiers').update(parsed.data).eq('id', editing.id);
-      if (error) toast.error(error.message);
-      else toast.success('Tier updated');
-    } else {
-      const { error } = await supabase.from('pricing_tiers').insert(parsed.data);
-      if (error) toast.error(error.message);
-      else toast.success('Tier created');
+    try {
+      if (editing) {
+        await apiRequest(`/api/admin/pricing-tiers/${editing.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(parsed.data),
+        });
+        toast.success('Tier updated');
+      } else {
+        await apiRequest('/api/admin/pricing-tiers', {
+          method: 'POST',
+          body: JSON.stringify(parsed.data),
+        });
+        toast.success('Tier created');
+      }
+      setOpen(false);
+      refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save tier');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setOpen(false);
-    refresh();
   };
 
   const remove = async (t: PricingTier) => {
     if (!confirm(`Delete "${t.name}"?`)) return;
-    const { error } = await supabase.from('pricing_tiers').delete().eq('id', t.id);
-    if (error) toast.error(error.message);
-    else { toast.success('Deleted'); refresh(); }
+    try {
+      await apiRequest(`/api/admin/pricing-tiers/${t.id}`, {
+        method: 'DELETE',
+      });
+      toast.success('Deleted');
+      refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete tier');
+    }
   };
 
   const toggleVisible = async (t: PricingTier) => {
-    const { error } = await supabase.from('pricing_tiers').update({ is_visible: !t.is_visible }).eq('id', t.id);
-    if (error) toast.error(error.message);
-    else refresh();
+    try {
+      await apiRequest(`/api/admin/pricing-tiers/${t.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_visible: !t.is_visible }),
+      });
+      refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update visibility');
+    }
   };
 
   return (
@@ -120,7 +142,7 @@ export default function AdminPricing() {
                   {!t.is_visible && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">Hidden</span>}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-mono-data text-foreground">${t.price_monthly}</span>/mo · <span className="font-mono-data">${t.price_yearly}</span>/yr · {t.features.length} features · order {t.sort_order}
+                  <span className="font-mono-data text-foreground">{formatPrice(t.price_monthly)}</span>/mo · <span className="font-mono-data">{formatPrice(t.price_yearly)}</span>/yr · {t.features.length} features · order {t.sort_order}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -144,8 +166,8 @@ export default function AdminPricing() {
               <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Pro" /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Monthly $</Label><Input type="number" value={form.price_monthly} onChange={e => setForm({ ...form, price_monthly: Number(e.target.value) })} /></div>
-              <div><Label>Yearly $</Label><Input type="number" value={form.price_yearly} onChange={e => setForm({ ...form, price_yearly: Number(e.target.value) })} /></div>
+              <div><Label>Monthly ₹</Label><Input type="number" value={form.price_monthly} onChange={e => setForm({ ...form, price_monthly: Number(e.target.value) })} /></div>
+              <div><Label>Yearly ₹</Label><Input type="number" value={form.price_yearly} onChange={e => setForm({ ...form, price_yearly: Number(e.target.value) })} /></div>
               <div>
                 <Label>Period</Label>
                 <Select value={form.billing_period} onValueChange={v => setForm({ ...form, billing_period: v as Form['billing_period'] })}>

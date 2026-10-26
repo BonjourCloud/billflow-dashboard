@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { FONT_PAIRS } from '@/lib/fontPairs';
 
@@ -73,8 +73,11 @@ export default function AdminTheme() {
     document.documentElement.style.setProperty('--primary', primary);
     document.documentElement.style.setProperty('--ring', primary);
   }, [primary]);
-  useEffect(() => { document.documentElement.style.setProperty('--accent', accent); }, [accent]);
-  useEffect(() => { document.documentElement.style.setProperty('--background', background); }, [background]);
+  useEffect(() => {
+    if (!document.documentElement.classList.contains('light')) {
+      document.documentElement.style.setProperty('--background', background);
+    }
+  }, [background]);
 
   const applyPreset = (p: typeof PRESETS[0]) => {
     setPrimary(p.primary); setAccent(p.accent); setBackground(p.background);
@@ -85,18 +88,31 @@ export default function AdminTheme() {
     toast.success('Reverted to saved values');
   };
 
-  const save = async () => {
-    setSaving(true);
-    const { error } = await supabase.from('site_settings').update({
-      theme_primary_hsl: primary,
-      theme_accent_hsl: accent,
-      theme_background_hsl: background,
-      theme_font_pair: fontPair,
-    }).eq('id', 'default');
-    if (error) toast.error(error.message);
-    else { toast.success('Theme saved'); refresh(); }
+  
+const save = async () => {
+  setSaving(true);
+
+  try {
+    await apiRequest<{ success: boolean }>('/api/admin/site-settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        theme_primary_hsl: primary,
+        theme_accent_hsl: accent,
+        theme_background_hsl: background,
+        theme_font_pair: fontPair,
+      }),
+    });
+
+    toast.success('Theme saved');
+    await refresh();
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : 'Failed to save theme'
+    );
+  } finally {
     setSaving(false);
-  };
+  }
+};
 
   const ColorRow = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
     <div className="flex items-center gap-3">

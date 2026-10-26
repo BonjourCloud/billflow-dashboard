@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Zap, Shield, BarChart3, CreditCard, Bell, TrendingUp, CheckCircle2, Star } from 'lucide-react';
+import { formatPrice, formatCurrencyCompact } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
@@ -26,21 +27,21 @@ const features = [
 
 const stats = [
   { value: '50K+', label: 'Active Users' },
-  { value: '$2.4M', label: 'Bills Tracked' },
+  { value: formatCurrencyCompact(2_400_000), label: 'Bills Tracked' },
   { value: '99.9%', label: 'Uptime' },
   { value: '4.9★', label: 'App Rating' },
 ];
 
 const testimonials = [
-  { name: 'Sarah Chen', role: 'Product Manager', text: 'Completely transformed how I manage subscriptions. Saved me $340/month by catching duplicate charges.', avatar: 'SC' },
+  { name: 'Sarah Chen', role: 'Product Manager', text: 'Completely transformed how I manage subscriptions. Saved me ₹340/month by catching duplicate charges.', avatar: 'SC' },
   { name: 'Marcus Rivera', role: 'Freelancer', text: 'The AI insights are incredible. It predicted my spending pattern and helped me budget three months ahead.', avatar: 'MR' },
   { name: 'Emily Nakamura', role: 'Startup Founder', text: 'Best financial tool I\'ve used. The interface is gorgeous and the analytics are genuinely useful.', avatar: 'EN' },
 ];
 
-function formatPrice(monthly: number, period: string) {
-  if (period === 'forever') return { price: '$0', suffix: '/forever' };
-  if (period === 'year') return { price: `$${monthly}`, suffix: '/year' };
-  return { price: `$${monthly}`, suffix: '/month' };
+function formatTierPrice(monthly: number, period: string) {
+  if (period === 'forever') return { price: formatPrice(0), suffix: '/forever' };
+  if (period === 'year') return { price: formatPrice(monthly), suffix: '/year' };
+  return { price: formatPrice(monthly), suffix: '/month' };
 }
 
 export default function Landing() {
@@ -51,7 +52,7 @@ export default function Landing() {
   const { tiers } = usePricingTiers();
 
   const Logo = () => settings.logo_url ? (
-    <img src={settings.logo_url} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
+    <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
   ) : (
     <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
       <Zap className="w-4 h-4 text-primary-foreground" />
@@ -188,7 +189,7 @@ export default function Landing() {
           </motion.div>
           <div className="grid md:grid-cols-3 gap-6">
             {tiers.map((t, i) => {
-              const { price, suffix } = formatPrice(t.price_monthly, t.billing_period);
+              const { price, suffix } = formatTierPrice(t.price_monthly, t.billing_period);
               return (
                 <motion.div key={t.id} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
                   className={`rounded-xl p-6 border ${t.is_highlighted ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border glass-card'}`}>

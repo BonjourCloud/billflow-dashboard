@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DollarSign, Palette, ImageIcon, Users, ArrowRight } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { IndianRupee, Palette, ImageIcon, Users, ArrowRight } from 'lucide-react';
+import { apiRequest } from '@/lib/api';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { usePricingTiers } from '@/hooks/usePricingTiers';
 
@@ -11,15 +11,26 @@ export default function AdminDashboard() {
   const [adminCount, setAdminCount] = useState<number | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('user_roles')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('role', 'admin')
-      .then(({ count }) => setAdminCount(count ?? 0));
+    let mounted = true;
+    apiRequest<{ adminCount: number; pricingTiersCount: number }>('/api/admin/summary')
+      .then((data) => {
+        if (mounted) {
+          setAdminCount(data.adminCount ?? 0);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load admin summary:', err);
+        if (mounted) {
+          setAdminCount(0);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const cards = [
-    { to: '/admin/pricing', icon: DollarSign, label: 'Pricing tiers', value: `${tiers.length} tiers`, desc: 'Edit Free / Pro / Enterprise plans' },
+    { to: '/admin/pricing', icon: IndianRupee, label: 'Pricing tiers', value: `${tiers.length} tiers`, desc: 'Edit Free / Pro / Enterprise plans' },
     { to: '/admin/branding', icon: ImageIcon, label: 'Branding', value: settings.brand_name, desc: 'Logo, brand name, hero copy' },
     { to: '/admin/theme', icon: Palette, label: 'Theme', value: settings.theme_font_pair, desc: 'Colors and typography' },
   ];
@@ -54,7 +65,11 @@ export default function AdminDashboard() {
           {adminCount === null ? 'Loading admins…' : `${adminCount} admin${adminCount === 1 ? '' : 's'} configured`}
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Grant additional admins via SQL: <code className="font-mono-data text-foreground">INSERT INTO user_roles (user_id, role) VALUES ('uuid', 'admin');</code>
+          Grant or revoke admin access in the{' '}
+          <Link to="/admin/users" className="text-primary underline hover:text-primary/80">
+            Users tab
+          </Link>{' '}
+          or configure <code className="font-mono-data text-foreground">ADMIN_CLERK_USER_IDS</code>.
         </p>
       </div>
     </div>

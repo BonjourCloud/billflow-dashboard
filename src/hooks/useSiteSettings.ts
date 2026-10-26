@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode, createElement } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { getFontPair } from '@/lib/fontPairs';
 
 export interface SiteSettings {
@@ -14,6 +14,7 @@ export interface SiteSettings {
   theme_background_hsl: string;
   theme_font_pair: string;
   updated_at: string;
+  logo_display_url?: string | null;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -44,7 +45,16 @@ function applyToDocument(s: SiteSettings) {
   root.style.setProperty('--primary', s.theme_primary_hsl);
   root.style.setProperty('--ring', s.theme_primary_hsl);
   root.style.setProperty('--accent', s.theme_accent_hsl);
-  root.style.setProperty('--background', s.theme_background_hsl);
+
+  const isLight =
+    root.classList.contains('light') ||
+    localStorage.getItem('billflow_theme') === 'light';
+
+  if (!isLight) {
+    root.style.setProperty('--background', s.theme_background_hsl);
+  } else {
+    root.style.removeProperty('--background');
+  }
 
   const pair = getFontPair(s.theme_font_pair);
   root.style.setProperty('--font-heading', `'${pair.heading}', system-ui, sans-serif`);
@@ -66,47 +76,41 @@ function applyToDocument(s: SiteSettings) {
   document.title = s.brand_name;
 }
 
+
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('*')
-      .eq('id', 'default')
-      .maybeSingle();
-    if (!error && data) {
+    try {
+      const data = await apiRequest<Partial<SiteSettings>>(
+        '/api/site-settings',
+        { authenticated: false },
+      );
+
       const merged = { ...DEFAULTS, ...data } as SiteSettings;
       setSettings(merged);
       applyToDocument(merged);
-    } else {
+    } catch (error) {
+      console.error('Failed to load site settings:', error);
+      setSettings(DEFAULTS);
       applyToDocument(DEFAULTS);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
-    load();
-    // Realtime subscription for live admin edits
-    const channel = supabase
-      .channel('site_settings_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'site_settings' },
-        () => load()
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void load();
   }, []);
 
   return createElement(
     SiteSettingsContext.Provider,
     { value: { settings, loading, refresh: load } },
-    children
+    children,
   );
 }
+
 
 export function useSiteSettings() {
   const ctx = useContext(SiteSettingsContext);

@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  frontend:
+    name: Frontend lint, typecheck, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      # mongodb-memory-server's postinstall would download MongoDB during
+      # `npm ci`, bypassing the cache below; download at test time instead.
+      - name: Install frontend dependencies
+        run: npm ci
+        env:
+          MONGOMS_DISABLE_POSTINSTALL: "1"
+
+      # Backend tests in src/test import server code, which resolves its
+      # dependencies (mongoose, express, @clerk/express) from server/node_modules.
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # mongodb-memory-server stores its MongoDB binary in node_modules/.cache
+      # (it prefers that over ~/.cache when node_modules exists). Restore after
+      # `npm ci`, which recreates node_modules; on a miss the integration tests
+      # download the binary and the cache is saved after the job.
+      - name: Cache MongoDB binaries
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Integration tests (in-memory MongoDB replica set)
+        run: npm run test:integration
+
+      # Production builds require VITE_API_URL and a Clerk publishable key. This
+      # step only checks that the app compiles, so placeholders are enough.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_URL: https://api.example.invalid
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci-placeholder
+
+  e2e:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    env:
+      # ClerkProvider needs a real publishable key to load. Add a Clerk
+      # development key as the VITE_CLERK_PUBLISHABLE_KEY repository secret;
+      # without it (e.g. on fork PRs) these steps are skipped.
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+    steps:
+      - name: Report skipped run
+        if: env.VITE_CLERK_PUBLISHABLE_KEY == ''
+        run: echo "::notice::Skipping browser smoke tests; VITE_CLERK_PUBLISHABLE_KEY secret is not set."
+
+      - uses: actions/checkout@v4
+        if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
+
+      - uses: actions/setup-node@v4
+        if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
+        run: npm ci
+        env:
+          # Browser tests don't use MongoDB.
+          MONGOMS_DISABLE_POSTINSTALL: "1"
+
+      - name: Install Chromium
+        if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        if: env.VITE_CLERK_PUBLISHABLE_KEY != ''
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure() && env.VITE_CLERK_PUBLISHABLE_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # Major user journeys at desktop, tablet, and mobile sizes: the production
+  # frontend build (with a test-only Clerk stand-in) against the real API on an
+  # in-memory MongoDB. Needs no secrets. See docs/TESTING.md.
+  fullstack-e2e:
+    name: Full-stack browser journeys
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        env:
+          MONGOMS_DISABLE_POSTINSTALL: "1"
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Cache MongoDB binaries
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full-stack journeys
+        run: npm run test:e2e:fullstack
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-fullstack-report
+          path: playwright-report/
+          retention-days: 7
+
+  server:
+    name: Server typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

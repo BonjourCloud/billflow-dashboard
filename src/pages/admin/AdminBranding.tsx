@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { apiRequest } from '@/lib/api';
 
 const schema = z.object({
   brand_name: z.string().trim().min(1).max(40),
   hero_headline: z.string().trim().min(1).max(120),
   hero_subheadline: z.string().trim().min(1).max(400),
   hero_cta_label: z.string().trim().min(1).max(40),
-  logo_url: z.string().url().nullable().or(z.literal('').transform(() => null)),
+  logo_url: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith('https://'), 'Logo URL must use https.')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
 });
 
 export default function AdminBranding() {
@@ -29,6 +34,14 @@ export default function AdminBranding() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState(
+    settings.logo_display_url || settings.logo_url || '',);
+
+  useEffect(() => {
+    setLogoPreviewUrl(
+      settings.logo_display_url || settings.logo_url || '',
+    );
+  }, [settings.logo_display_url, settings.logo_url]);
 
   useEffect(() => {
     setForm({
@@ -39,29 +52,76 @@ export default function AdminBranding() {
       logo_url: settings.logo_url ?? '',
     });
   }, [settings]);
-
   const handleUpload = async (file: File) => {
-    if (file.size > 2 * 1024 * 1024) { toast.error('Max 2MB'); return; }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Max 2MB');
+      return;
+    }
+
     setUploading(true);
-    const ext = file.name.split('.').pop();
-    const path = `logo-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('branding').upload(path, file, { upsert: true });
-    if (error) { toast.error(error.message); setUploading(false); return; }
-    const { data } = supabase.storage.from('branding').getPublicUrl(path);
-    setForm(f => ({ ...f, logo_url: data.publicUrl }));
-    setUploading(false);
-    toast.success('Logo uploaded — click Save to apply');
+
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      const result = await apiRequest<{ url: string }>(
+        '/api/admin/branding/logo',
+        {
+          method: 'POST',
+          body: formData,
+        },
+      );
+
+      setForm((current) => ({
+        ...current,
+        logo_url: result.url,
+      }));
+
+      setLogoPreviewUrl(result.url);
+
+      toast.success('Logo uploaded — click Save to apply');
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Logo upload failed',
+      );
+    } finally {
+      setUploading(false);
+    }
   };
+
 
   const save = async () => {
-    const parsed = schema.safeParse({ ...form, logo_url: form.logo_url || null });
-    if (!parsed.success) { toast.error(parsed.error.errors[0].message); return; }
+    const parsed = schema.safeParse({
+      ...form,
+      logo_url: form.logo_url || null,
+    });
+
+    if (!parsed.success) {
+      toast.error(parsed.error.errors[0].message);
+      return;
+    }
+
     setSaving(true);
-    const { error } = await supabase.from('site_settings').update(parsed.data).eq('id', 'default');
-    if (error) toast.error(error.message);
-    else { toast.success('Branding saved'); refresh(); }
-    setSaving(false);
+
+    try {
+      await apiRequest<{ success: boolean }>('/api/admin/branding', {
+        method: 'PATCH',
+        body: JSON.stringify(parsed.data),
+      });
+
+      toast.success('Branding saved');
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save branding',
+      );
+    } finally {
+      setSaving(false);
+    }
   };
+
 
   return (
     <div className="p-8 max-w-3xl">
@@ -81,8 +141,12 @@ export default function AdminBranding() {
             <Label>Logo</Label>
             <div className="flex items-center gap-4 mt-2">
               <div className="w-16 h-16 rounded-xl border border-border/40 bg-secondary/50 flex items-center justify-center overflow-hidden">
-                {form.logo_url ? (
-                  <img src={form.logo_url} alt="logo" className="w-full h-full object-contain" />
+                {logoPreviewUrl ? (
+                  <img
+                    src={logoPreviewUrl}
+                    alt="BillFlow logo preview"
+                    className="w-full h-full object-contain"
+                  />
                 ) : (
                   <ImageIcon className="w-6 h-6 text-muted-foreground" />
                 )}

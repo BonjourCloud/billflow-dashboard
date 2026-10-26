@@ -26,7 +26,7 @@ Dark mode is the default; a light theme exists via the same token set (class-bas
 
 - Headings: `font-semibold`, tight tracking; body: default sans stack.
 - Monetary values and dates use `font-mono-data` for tabular alignment.
-- Currency formatted as `$x,xxx.xx`; dates via `date-fns` (`MMM dd, yyyy`).
+- Currency is shown in Indian Rupees via `src/lib/currency.ts` (`₹2,10,759.00`, Indian digit grouping); dates via `date-fns` (`MMM dd, yyyy`).
 
 ## Layout
 

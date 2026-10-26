@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { formatCurrency } from '@/lib/currency';
 
 interface HeroWidgetProps {
   totalAmount: number;
@@ -23,14 +24,14 @@ export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmou
       <div>
         <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Monthly Flow</p>
         <div className="mt-3 text-5xl font-bold font-mono-data tracking-tighter">
-          ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          {formatCurrency(totalAmount)}
         </div>
       </div>
 
       <div className="mt-6 space-y-3">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{paidPercent.toFixed(0)}% paid</span>
-          <span className="font-mono-data">${paidAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="font-mono-data">{formatCurrency(paidAmount)}</span>
         </div>
         <div className="relative h-3 rounded-full bg-secondary overflow-hidden">
           <motion.div
@@ -59,7 +60,7 @@ function StatChip({ icon, label, count, amount, className }: { icon: React.React
         <span className="text-xs font-medium">{label}</span>
       </div>
       <p className="text-lg font-semibold font-mono-data">{count}</p>
-      <p className="text-xs text-muted-foreground font-mono-data">${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+      <p className="text-xs text-muted-foreground font-mono-data">{formatCurrency(amount)}</p>
     </div>
   );
 }

@@ -1,13 +1,17 @@
 import { motion } from 'framer-motion';
 import { Clock, CalendarDays } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Bill } from '@/data/bills';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
+import { formatCurrency } from '@/lib/currency';
 
 interface UpcomingBillsWidgetProps {
   bills: Bill[];
 }
 
 export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
+  const navigate = useNavigate();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -25,14 +29,22 @@ export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
           const urgency = daysUntil <= 3 ? 'status-overdue' : daysUntil <= 7 ? 'status-pending' : 'status-upcoming';
           return (
             <motion.div
-              key={bill.id}
+              key={bill._id}
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2, delay: 0.15 + i * 0.05 }}
-              className="flex items-center justify-between p-3 rounded-2xl bg-secondary/50"
+              onClick={() => navigate(`/bill/${bill._id}`)}
+              className="flex items-center justify-between p-3 rounded-2xl bg-secondary/50 hover:bg-secondary/70 transition-colors cursor-pointer group"
             >
-              <div>
-                <p className="font-medium text-sm">{bill.name}</p>
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">{bill.name}</p>
+                  {bill.planId && (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 shrink-0">
+                      EMI
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 mt-1">
                   <CalendarDays className={`w-3 h-3 ${urgency}`} />
                   <span className={`text-xs ${urgency}`}>
@@ -40,8 +52,8 @@ export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
                   </span>
                 </div>
               </div>
-              <span className="font-mono-data font-semibold text-sm">
-                ${bill.amount.toFixed(2)}
+              <span className="font-mono-data font-semibold text-sm shrink-0">
+                {formatCurrency(bill.amount)}
               </span>
             </motion.div>
           );

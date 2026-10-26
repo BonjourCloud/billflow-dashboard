@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Bill } from '@/data/bills';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
 
 const CATEGORY_COLORS: Record<string, string> = {
   utilities: 'hsl(217, 91%, 60%)',
@@ -60,28 +61,28 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
               dataKey="category"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 11 }}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
               tickFormatter={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
             />
             <YAxis
               axisLine={false}
               tickLine={false}
-              tick={{ fill: 'hsl(215, 20%, 55%)', fontSize: 11 }}
-              tickFormatter={(v: number) => `$${v}`}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              tickFormatter={(v: number) => formatCurrencyCompact(v)}
               width={50}
             />
             <Tooltip
-              cursor={{ fill: 'hsl(217, 19%, 14%, 0.5)', radius: 8 }}
+              cursor={{ fill: 'hsl(var(--secondary) / 0.5)', radius: 8 }}
               contentStyle={{
-                background: 'hsl(222, 47%, 7%)',
-                border: '1px solid hsl(217, 19%, 27%, 0.4)',
+                background: 'hsl(var(--card))',
+                border: '1px solid hsl(var(--border))',
                 borderRadius: '12px',
                 backdropFilter: 'blur(12px)',
                 fontSize: '13px',
               }}
-              labelStyle={{ color: 'hsl(210, 40%, 98%)', fontWeight: 600, textTransform: 'capitalize' }}
-              itemStyle={{ color: 'hsl(215, 20%, 55%)' }}
-              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+              labelStyle={{ color: 'hsl(var(--card-foreground))', fontWeight: 600, textTransform: 'capitalize' }}
+              itemStyle={{ color: 'hsl(var(--muted-foreground))' }}
+              formatter={(value: number) => [formatCurrency(value), 'Amount']}
             />
             <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={48} className="cursor-pointer" onClick={(_: unknown, index: number) => {
               const clicked = data[index].category;
