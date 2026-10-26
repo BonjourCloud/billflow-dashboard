@@ -47,11 +47,11 @@ export function DashboardHeader() {
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
+        <div className="p-1.5 rounded-2xl bg-primary/10 overflow-hidden">
           {settings.logo_url ? (
-            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-5 h-5 object-contain" />
+            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-10 h-10 object-contain" />
           ) : (
-            <Receipt className="w-5 h-5 text-primary" />
+            <Receipt className="w-6 h-6 text-primary" />
           )}
         </div>
         <div>
