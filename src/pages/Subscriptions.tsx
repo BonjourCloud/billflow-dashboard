@@ -19,7 +19,8 @@ import { useSubscriptionStore } from '@/hooks/useSubscriptionStore';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { SubscriptionDialog } from '@/components/subscriptions/SubscriptionDialog';
 import { Subscription } from '@/data/subscriptions';
-import { BillCategory, CATEGORIES } from '@/data/bills';
+import { BillCategory } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -48,6 +49,7 @@ function getOrdinalSuffix(n: number): string {
 }
 
 export default function Subscriptions() {
+  const { categories, getLabel } = useCategories();
   const store = useSubscriptionStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
@@ -266,9 +268,9 @@ export default function Subscriptions() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c} className="capitalize">
-                    {c}
+                {categories.map((c) => (
+                  <SelectItem key={c.slug} value={c.slug}>
+                    {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -350,8 +352,8 @@ export default function Subscriptions() {
                             <span>{sub.name}</span>
                           </div>
                         </td>
-                        <td className="py-3 capitalize text-sm text-muted-foreground">
-                          {sub.category}
+                        <td className="py-3 text-sm text-muted-foreground">
+                          {getLabel(sub.category)}
                         </td>
                         <td className="py-3 text-sm text-muted-foreground">
                           Monthly

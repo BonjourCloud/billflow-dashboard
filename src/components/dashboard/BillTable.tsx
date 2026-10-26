@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X, Repeat } from 'lucide-react';
-import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
+import { Bill, BillStatus, BillCategory, STATUSES } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,6 +42,7 @@ export function BillTable({
   sortBy, setSortBy, sortOrder, setSortOrder, searchQuery, setSearchQuery,
   onAdd, onEdit, onDelete,
 }: BillTableProps) {
+  const { categories, getLabel } = useCategories();
   const navigate = useNavigate();
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const [deleteScopeChoice, setDeleteScopeChoice] = useState<'this' | 'future'>('this');
@@ -100,7 +102,7 @@ export function BillTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {CATEGORIES.map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+            {categories.map(c => <SelectItem key={c.slug} value={c.slug}>{c.label}</SelectItem>)}
           </SelectContent>
         </Select>
         {(filterStatus !== 'all' || filterCategory !== 'all' || searchQuery) && (
@@ -162,7 +164,7 @@ export function BillTable({
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 capitalize text-sm text-muted-foreground">{bill.category}</td>
+                    <td className="py-3 text-sm text-muted-foreground">{getLabel(bill.category)}</td>
                     <td className="py-3 font-mono-data text-sm font-semibold">{formatCurrency(bill.amount)}</td>
                     <td className="py-3 font-mono-data text-sm text-muted-foreground">{format(new Date(bill.dueDate), 'MMM dd, yyyy')}</td>
                     <td className="py-3">{statusBadge(bill.status)}</td>

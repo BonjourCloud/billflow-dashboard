@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCategories } from '@/hooks/useCategories';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -45,6 +46,7 @@ import {
 import { formatCurrency } from '@/lib/currency';
 
 export default function InstallmentDetail() {
+  const { getLabel } = useCategories();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -206,8 +208,8 @@ export default function InstallmentDetail() {
                 {getStatusBadge(plan.status)}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="capitalize px-2.5 py-0.5 rounded-lg bg-secondary/80 font-medium">
-                  {plan.category}
+                <span className="px-2.5 py-0.5 rounded-lg bg-secondary/80 font-medium">
+                  {getLabel(plan.category)}
                 </span>
                 <span>•</span>
                 <span>{PLAN_TYPE_LABELS[plan.planType] || plan.planType}</span>

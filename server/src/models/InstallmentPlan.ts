@@ -1,4 +1,9 @@
 import mongoose, { type InferSchemaType } from "mongoose";
+import {
+  CATEGORY_SLUG_PATTERN,
+  DEFAULT_CATEGORY_SLUGS,
+  categorySlugSchema,
+} from "./Category.js";
 import { z } from "zod";
 
 export const PLAN_TYPES = [
@@ -18,16 +23,10 @@ export const PLAN_STATUSES = [
 
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
 
-export const PLAN_CATEGORIES = [
-  "utilities",
-  "entertainment",
-  "software",
-  "finance",
-  "insurance",
-  "housing",
-] as const;
+/** Built-in category slugs. Live categories are managed in the database (see Category model). */
+export const PLAN_CATEGORIES = DEFAULT_CATEGORY_SLUGS;
 
-export type PlanCategory = (typeof PLAN_CATEGORIES)[number];
+export type PlanCategory = string;
 
 /**
  * Calculates installment plan financial metrics using a simple flat-interest
@@ -98,7 +97,7 @@ export const installmentPlanCreateSchema = z
       .min(1, "Plan name is required.")
       .max(100, "Plan name must not exceed 100 characters."),
     planType: z.enum(PLAN_TYPES).optional().default("other"),
-    category: z.enum(PLAN_CATEGORIES).optional().default("finance"),
+    category: categorySlugSchema.optional(),
     principalAmount: z
       .number()
       .positive("Principal amount must be a positive number.")
@@ -162,7 +161,7 @@ export const installmentPlanUpdateSchema = z
       .min(1, "Plan name is required.")
       .max(100, "Plan name must not exceed 100 characters.")
       .optional(),
-    category: z.enum(PLAN_CATEGORIES).optional(),
+    category: categorySlugSchema.optional(),
     planType: z.enum(PLAN_TYPES).optional(),
   })
   .strict();
@@ -193,7 +192,7 @@ const installmentPlanSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: PLAN_CATEGORIES,
+      match: CATEGORY_SLUG_PATTERN,
       default: "finance",
     },
     principalAmount: {

@@ -63,8 +63,6 @@ const Index = () => {
         <div className="grid grid-cols-12 gap-4">
           <HeroWidget {...store.stats} />
           <UpcomingBillsWidget bills={store.upcomingBills} />
-          <SpendingChartWidget bills={store.allBills} activeCategory={store.filterCategory} onCategoryClick={(cat) => store.setFilterCategory(cat as BillCategory | 'all')} />
-          <AIInsightsWidget bills={store.allBills} isLoading={store.isLoading} />
           <BillTable
             bills={store.bills}
             filterStatus={store.filterStatus}
@@ -81,6 +79,8 @@ const Index = () => {
             onEdit={handleEdit}
             onDelete={store.deleteBill}
           />
+          <SpendingChartWidget bills={store.allBills} activeCategory={store.filterCategory} onCategoryClick={(cat) => store.setFilterCategory(cat as BillCategory | 'all')} />
+          <AIInsightsWidget bills={store.allBills} isLoading={store.isLoading} />
         </div>
       </div>
       <BillDialog

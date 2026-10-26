@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Zap, Shield, BarChart3, CreditCard, Bell, TrendingUp, CheckCircle2, Star } from 'lucide-react';
-import { formatPrice, formatCurrencyCompact } from '@/lib/currency';
+import { formatPrice } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
@@ -17,25 +17,25 @@ const fadeUp = {
 };
 
 const features = [
-  { icon: CreditCard, title: 'Bill Tracking', desc: 'Track every subscription and bill in one unified dashboard with smart categorization.' },
-  { icon: Bell, title: 'Smart Alerts', desc: 'Never miss a payment. Get intelligent reminders before bills are due.' },
-  { icon: BarChart3, title: 'Spending Analytics', desc: 'Interactive charts and AI-powered insights to optimize your spending.' },
-  { icon: Shield, title: 'Bank-Grade Security', desc: 'Your financial data is encrypted end-to-end with enterprise-level protection.' },
-  { icon: TrendingUp, title: 'Trend Analysis', desc: 'Spot spending patterns and forecast future expenses with precision.' },
-  { icon: Zap, title: 'Instant Sync', desc: 'Real-time updates across all your devices. Always up to date.' },
+  { icon: CreditCard, title: 'Bill Tracking', desc: 'One-time and monthly bills in one place, with search, filters and categories.' },
+  { icon: Bell, title: 'Smart Alerts', desc: 'In-app reminders for bills due within 5 days or already overdue.' },
+  { icon: BarChart3, title: 'Spending Insights', desc: 'Category charts and simple insights that show where your money goes.' },
+  { icon: TrendingUp, title: 'EMI & Installments', desc: 'Schedules, interest and remaining balance, updated as each payment comes in.' },
+  { icon: Shield, title: 'Secure Sign-In', desc: 'Google sign-in through Clerk. Your data travels over HTTPS and is stored in MongoDB Atlas.' },
+  { icon: Zap, title: 'Anywhere Access', desc: 'Runs in your browser, so your bills are with you on any device.' },
 ];
 
-const stats = [
-  { value: '50K+', label: 'Active Users' },
-  { value: formatCurrencyCompact(2_400_000), label: 'Bills Tracked' },
-  { value: '99.9%', label: 'Uptime' },
-  { value: '4.9★', label: 'App Rating' },
+const highlights = [
+  { value: 'Free', label: 'To get started' },
+  { value: '5 days', label: 'Due-date heads-up' },
+  { value: 'EMI', label: 'Installment tracking' },
+  { value: '1 view', label: 'For every bill' },
 ];
 
-const testimonials = [
-  { name: 'Sarah Chen', role: 'Product Manager', text: 'Completely transformed how I manage subscriptions. Saved me ₹340/month by catching duplicate charges.', avatar: 'SC' },
-  { name: 'Marcus Rivera', role: 'Freelancer', text: 'The AI insights are incredible. It predicted my spending pattern and helped me budget three months ahead.', avatar: 'MR' },
-  { name: 'Emily Nakamura', role: 'Startup Founder', text: 'Best financial tool I\'ve used. The interface is gorgeous and the analytics are genuinely useful.', avatar: 'EN' },
+const whyBillWill = [
+  { title: 'Partial payments, handled', text: 'Pay a bill in full or in parts. BillWill keeps the balance straight and guards against double entries.' },
+  { title: 'Subscriptions on autopilot', text: 'Recurring series create next month\u2019s bill for you, so nothing slips through.' },
+  { title: 'EMIs without the spreadsheet', text: 'Schedule, interest and remaining balance update as each payment comes in.' },
 ];
 
 function formatTierPrice(monthly: number, period: string) {
@@ -70,7 +70,7 @@ export default function Landing() {
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
+            <a href="#why" className="hover:text-foreground transition-colors">Why BillWill</a>
           </div>
           <div className="flex items-center gap-3">
             {isAdmin && <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>Admin</Button>}
@@ -96,7 +96,7 @@ export default function Landing() {
         <div className="relative mx-auto max-w-4xl text-center">
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary text-sm mb-8">
-            <Star className="w-3.5 h-3.5" /> Now with AI-powered insights
+            <Star className="w-3.5 h-3.5" /> Smart insights, built in
           </motion.div>
           <motion.h1 variants={fadeUp} initial="hidden" animate="visible" custom={1}
             className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.08] mb-6">
@@ -120,7 +120,7 @@ export default function Landing() {
 
       <section className="py-12 border-y border-border/40 bg-card/30 backdrop-blur-sm">
         <div className="mx-auto max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-8 px-6">
-          {stats.map((s, i) => (
+          {highlights.map((s, i) => (
             <motion.div key={s.label} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
               className="text-center">
               <div className="text-3xl md:text-4xl font-extrabold text-primary font-mono">{s.value}</div>
@@ -134,8 +134,8 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
             className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Everything you need to manage bills</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">Powerful features designed to simplify your financial life.</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Everything you need to stay on top of bills</h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">Less chasing, more ticking off.</p>
           </motion.div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((f, i) => (
@@ -152,28 +152,22 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="testimonials" className="py-24 bg-card/30 border-y border-border/40 px-6">
+      <section id="why" className="py-24 bg-card/30 border-y border-border/40 px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
             className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Loved by thousands</h2>
-            <p className="text-muted-foreground text-lg">See what our users are saying.</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Why BillWill</h2>
+            <p className="text-muted-foreground text-lg">Built around how bills actually work.</p>
           </motion.div>
           <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <motion.div key={t.name} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
+            {whyBillWill.map((w, i) => (
+              <motion.div key={w.title} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i}
                 className="glass-card rounded-xl p-6">
-                <div className="flex items-center gap-1 mb-4">
-                  {[...Array(5)].map((_, j) => <Star key={j} className="w-4 h-4 fill-primary text-primary" />)}
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-5 h-5 text-primary" />
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-6">"{t.text}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">{t.avatar}</div>
-                  <div>
-                    <div className="font-medium text-sm">{t.name}</div>
-                    <div className="text-xs text-muted-foreground">{t.role}</div>
-                  </div>
-                </div>
+                <h3 className="font-semibold text-lg mb-2">{w.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{w.text}</p>
               </motion.div>
             ))}
           </div>
@@ -218,10 +212,10 @@ export default function Landing() {
       <section className="py-24 px-6">
         <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
           className="mx-auto max-w-3xl text-center glass-card rounded-2xl p-12 md:p-16 border border-primary/20">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Ready to simplify your bills?</h2>
-          <p className="text-muted-foreground text-lg mb-8">Join 50,000+ users who've taken control of their finances.</p>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Make it your will to never miss a bill.</h2>
+          <p className="text-muted-foreground text-lg mb-8">Get early access and take the stress out of due dates.</p>
           <Button size="lg" className="text-base px-8 h-12" onClick={() => navigate('/login')}>
-            Get Started Free <ArrowRight className="w-4 h-4" />
+            Get Early Access <ArrowRight className="w-4 h-4" />
           </Button>
         </motion.div>
       </section>

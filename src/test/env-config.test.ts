@@ -8,7 +8,7 @@ import { resolveClerkPublishableKey } from "@/lib/clerkPublishableKey";
 
 const validDevEnv = {
   NODE_ENV: "development",
-  MONGODB_URI: "mongodb+srv://user:pass@cluster.example.net/billflow",
+  MONGODB_URI: "mongodb+srv://user:pass@cluster.example.net/billwill",
   CLERK_SECRET_KEY: "sk_test_abc123",
   CLERK_PUBLISHABLE_KEY: "pk_test_abc123",
 };
@@ -154,7 +154,7 @@ describe("Phase 4A — Server environment validation", () => {
     };
     expect(issuesFor(withAws).join("\n")).toMatch(/AWS_S3_BUCKET/);
     expect(
-      validateServerEnv({ ...withAws, AWS_S3_BUCKET: "billflow-assets" }),
+      validateServerEnv({ ...withAws, AWS_S3_BUCKET: "billwill-assets" }),
     ).toBeTruthy();
   });
 
@@ -198,14 +198,14 @@ describe("Phase 4A — Frontend API base URL resolution", () => {
   it("requires https in production except for a local API", () => {
     for (const url of [
       "http://api.example.com",
-      "http://billflow-api.onrender.com",
+      "http://billwill-api.onrender.com",
       "http://localhost.example.com",
       "http://10.0.0.5:5001",
     ]) {
       expect(() => resolveApiBaseUrl(url, true), url).toThrowError(/must use https/);
     }
-    expect(resolveApiBaseUrl("https://billflow-api.onrender.com", true)).toBe(
-      "https://billflow-api.onrender.com",
+    expect(resolveApiBaseUrl("https://billwill-api.onrender.com", true)).toBe(
+      "https://billwill-api.onrender.com",
     );
     for (const url of [
       "http://localhost:5001",

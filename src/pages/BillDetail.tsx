@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useCategories } from '@/hooks/useCategories';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -66,6 +67,7 @@ const paymentStatusCls = (s: PaymentRecord['status']) => {
 };
 
 const BillDetail = () => {
+  const { getLabel } = useCategories();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -313,8 +315,8 @@ const BillDetail = () => {
           </Button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold">{bill.name}</h1>
-            <p className="text-sm text-muted-foreground capitalize">
-              {bill.category} •{' '}
+            <p className="text-sm text-muted-foreground">
+              {getLabel(bill.category)} •{' '}
               {bill.planId && bill.installmentNumber && bill.totalInstallments
                 ? `Installment ${bill.installmentNumber} of ${bill.totalInstallments}`
                 : bill.recurrenceType === 'recurring' || bill.isSubscription

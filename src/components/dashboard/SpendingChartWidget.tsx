@@ -4,15 +4,7 @@ import { BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Bill } from '@/data/bills';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/currency';
-
-const CATEGORY_COLORS: Record<string, string> = {
-  utilities: 'hsl(217, 91%, 60%)',
-  entertainment: 'hsl(280, 67%, 60%)',
-  software: 'hsl(142, 71%, 45%)',
-  finance: 'hsl(38, 92%, 50%)',
-  insurance: 'hsl(346, 84%, 61%)',
-  housing: 'hsl(190, 70%, 50%)',
-};
+import { useCategories } from '@/hooks/useCategories';
 
 interface SpendingChartWidgetProps {
   bills: Bill[];
@@ -21,6 +13,7 @@ interface SpendingChartWidgetProps {
 }
 
 export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: SpendingChartWidgetProps) {
+  const { getLabel, getColor } = useCategories();
   const data = useMemo(() => {
     const byCategory: Record<string, number> = {};
     bills.forEach(b => {
@@ -50,7 +43,7 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
             onClick={() => onCategoryClick?.('all')}
             className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
           >
-            ✕ Clear filter: <span className="capitalize font-medium">{activeCategory}</span>
+            ✕ Clear filter: <span className="font-medium">{getLabel(activeCategory)}</span>
           </button>
         )}
       </div>
@@ -62,7 +55,7 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
               axisLine={false}
               tickLine={false}
               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-              tickFormatter={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
+              tickFormatter={(v: string) => getLabel(v)}
             />
             <YAxis
               axisLine={false}
@@ -80,7 +73,8 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
                 backdropFilter: 'blur(12px)',
                 fontSize: '13px',
               }}
-              labelStyle={{ color: 'hsl(var(--card-foreground))', fontWeight: 600, textTransform: 'capitalize' }}
+              labelStyle={{ color: 'hsl(var(--card-foreground))', fontWeight: 600 }}
+              labelFormatter={(v: string) => getLabel(v)}
               itemStyle={{ color: 'hsl(var(--muted-foreground))' }}
               formatter={(value: number) => [formatCurrency(value), 'Amount']}
             />
@@ -91,7 +85,7 @@ export function SpendingChartWidget({ bills, activeCategory, onCategoryClick }: 
               {data.map((entry) => (
                 <Cell
                   key={entry.category}
-                  fill={CATEGORY_COLORS[entry.category] || 'hsl(217, 91%, 60%)'}
+                  fill={getColor(entry.category)}
                   opacity={activeCategory && activeCategory !== 'all' && entry.category !== activeCategory ? 0.3 : 1}
                 />
               ))}

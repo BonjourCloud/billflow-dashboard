@@ -19,12 +19,12 @@ export interface SiteSettings {
 
 const DEFAULTS: SiteSettings = {
   id: 'default',
-  brand_name: 'BillFlow',
+  brand_name: 'BillWill',
   logo_url: null,
-  hero_headline: 'Take Control of Your Financial Life',
+  hero_headline: 'Where there\u2019s a Bill, there\u2019s a Will.',
   hero_subheadline:
-    'Track bills, manage subscriptions, and unlock AI-driven spending insights — all in one beautiful, intuitive dashboard.',
-  hero_cta_label: 'Start Free — No Card Needed',
+    'Track every bill, subscription and EMI in one calm dashboard — so you always know what\u2019s due, what\u2019s paid, and what\u2019s next.',
+  hero_cta_label: 'Get Early Access',
   theme_primary_hsl: '142 71% 45%',
   theme_accent_hsl: '217 91% 60%',
   theme_background_hsl: '222 47% 4%',
@@ -48,7 +48,7 @@ function applyToDocument(s: SiteSettings) {
 
   const isLight =
     root.classList.contains('light') ||
-    localStorage.getItem('billflow_theme') === 'light';
+    localStorage.getItem('billwill_theme') === 'light';
 
   if (!isLight) {
     root.style.setProperty('--background', s.theme_background_hsl);

@@ -97,6 +97,24 @@ const CLIENT_ORIGINS = serverEnv?.CLIENT_ORIGINS ?? ["http://localhost:8080"];
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { SiteSettings } from "./models/SiteSettings.js";
 import {
+  Category,
+  categorySlugSchema,
+  createCategorySchema,
+  updateCategorySchema,
+  isValidCategoryId,
+  seedCategoriesIfEmpty,
+} from "./models/Category.js";
+import {
+  categoryLabelTaken,
+  countOtherActiveCategories,
+  createCategory,
+  getCategoryProblem,
+  isCategoryInUse,
+  listCategories,
+  resolveDefaultCategorySlug,
+  toCategoryDto,
+} from "./services/categoryService.js";
+import {
   PricingTier,
   seedPricingTiersIfEmpty,
   createPricingTierSchema,
@@ -133,7 +151,7 @@ function databaseState(): string {
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
     status: "ok",
-    service: "BillFlow API",
+    service: "BillWill API",
     database: databaseState(),
     timestamp: new Date().toISOString(),
   });
@@ -652,6 +670,142 @@ app.get("/api/admin/summary", async (req, res) => {
   }
 });
 
+// GET /api/categories — categories for dropdowns and labels (any signed-in user).
+// Includes inactive ones so older bills can still show their category name.
+app.get("/api/categories", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    return res.status(200).json(await listCategories());
+  } catch (error) {
+    console.error("Failed to load categories:", error);
+    return res.status(500).json({ error: "Failed to load categories." });
+  }
+});
+
+app.post("/api/admin/categories", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    const parsed = createCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid category data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    if (await categoryLabelTaken(parsed.data.label)) {
+      return res
+        .status(409)
+        .json({ error: "A category with this name already exists." });
+    }
+
+    // Materialise the built-in defaults first if the collection is still empty,
+    // so adding the first custom category never hides them.
+    await seedCategoriesIfEmpty();
+
+    const created = await createCategory(parsed.data.label, parsed.data.color);
+    return res.status(201).json(created);
+  } catch (error) {
+    console.error("Failed to create category:", error);
+    return res.status(500).json({ error: "Failed to create category." });
+  }
+});
+
+app.patch("/api/admin/categories/:id", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    if (!isValidCategoryId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid category ID format." });
+    }
+
+    const parsed = updateCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid category data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const existing = await Category.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: "Category not found." });
+    }
+
+    if (
+      parsed.data.label !== undefined &&
+      (await categoryLabelTaken(parsed.data.label, req.params.id))
+    ) {
+      return res
+        .status(409)
+        .json({ error: "A category with this name already exists." });
+    }
+
+    if (
+      parsed.data.is_active === false &&
+      existing.is_active !== false &&
+      (await countOtherActiveCategories(req.params.id)) === 0
+    ) {
+      return res
+        .status(400)
+        .json({ error: "At least one category must stay active." });
+    }
+
+    // The slug is intentionally immutable: bills reference it.
+    Object.assign(existing, parsed.data);
+    await existing.save();
+
+    return res.status(200).json(toCategoryDto(existing.toObject()));
+  } catch (error) {
+    console.error("Failed to update category:", error);
+    return res.status(500).json({ error: "Failed to update category." });
+  }
+});
+
+app.delete("/api/admin/categories/:id", async (req, res) => {
+  try {
+    const adminUserId = await requireAdminAuth(req, res);
+    if (!adminUserId) return;
+
+    if (!isValidCategoryId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid category ID format." });
+    }
+
+    const existing = await Category.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: "Category not found." });
+    }
+
+    if (await isCategoryInUse(existing.slug)) {
+      return res.status(409).json({
+        error:
+          "This category is used by existing bills. Deactivate it instead of deleting.",
+      });
+    }
+
+    if (
+      existing.is_active !== false &&
+      (await countOtherActiveCategories(req.params.id)) === 0
+    ) {
+      return res
+        .status(400)
+        .json({ error: "At least one category must stay active." });
+    }
+
+    await existing.deleteOne();
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete category:", error);
+    return res.status(500).json({ error: "Failed to delete category." });
+  }
+});
+
 app.get("/api/pricing-tiers", async (req, res) => {
   try {
     // Default tiers are seeded once at startup (startServer), not on reads.
@@ -1027,14 +1181,7 @@ export const billBodySchema = z
       )
       .transform((val) => new Date(val)),
     status: z.enum(["paid", "pending", "overdue"]),
-    category: z.enum([
-      "utilities",
-      "entertainment",
-      "software",
-      "finance",
-      "insurance",
-      "housing",
-    ]),
+    category: categorySlugSchema,
     isSubscription: z.boolean().optional(),
     recurrenceType: z.enum(["one_time", "recurring"]).optional(),
     recurringDay: z.number().int().min(1).max(31).optional(),
@@ -1070,16 +1217,7 @@ export const billUpdateSchema = z
       .transform((val) => new Date(val))
       .optional(),
     status: z.enum(["paid", "pending", "overdue"]).optional(),
-    category: z
-      .enum([
-        "utilities",
-        "entertainment",
-        "software",
-        "finance",
-        "insurance",
-        "housing",
-      ])
-      .optional(),
+    category: categorySlugSchema.optional(),
     isSubscription: z.boolean().optional(),
     recurrenceType: z.enum(["one_time", "recurring"]).optional(),
     recurringDay: z.number().int().min(1).max(31).optional(),
@@ -1157,6 +1295,11 @@ app.post("/api/bills", async (req, res) => {
       });
     }
 
+    const categoryProblem = await getCategoryProblem(parsed.data.category);
+    if (categoryProblem) {
+      return res.status(400).json({ error: categoryProblem });
+    }
+
     if (parsed.data.recurrenceType === "recurring") {
       const { primaryBill } = await createRecurringSeriesWithOccurrences(
         userId,
@@ -1222,6 +1365,14 @@ app.patch("/api/bills/:id", async (req, res) => {
         error: "Invalid bill data.",
         details: parsed.error.flatten(),
       });
+    }
+
+    const patchCategoryProblem = await getCategoryProblem(
+      parsed.data.category,
+      targetBill.category,
+    );
+    if (patchCategoryProblem) {
+      return res.status(400).json({ error: patchCategoryProblem });
     }
 
     const { updateScope = "this", ...updates } = parsed.data;
@@ -1630,6 +1781,13 @@ app.post("/api/installments", async (req, res) => {
       });
     }
 
+    const planCategoryProblem = await getCategoryProblem(parsed.data.category);
+    if (planCategoryProblem) {
+      return res.status(400).json({ error: planCategoryProblem });
+    }
+    const planCategory =
+      parsed.data.category ?? (await resolveDefaultCategorySlug());
+
     const anchorDay =
       parsed.data.recurringDay ?? parsed.data.startDate.getUTCDate();
 
@@ -1685,7 +1843,7 @@ app.post("/api/installments", async (req, res) => {
         amount,
         dueDate,
         status: "pending" as const,
-        category: parsed.data.category ?? "finance",
+        category: planCategory,
         isSubscription: false,
         recurrenceType: "one_time" as const,
         installmentNumber: k,
@@ -1697,7 +1855,7 @@ app.post("/api/installments", async (req, res) => {
       userId,
       name: parsed.data.name,
       planType: parsed.data.planType ?? "other",
-      category: parsed.data.category ?? "finance",
+      category: planCategory,
       principalAmount: parsed.data.principalAmount,
       downPayment: parsed.data.downPayment ?? 0,
       financedAmount: totals.financedAmount,
@@ -1906,6 +2064,14 @@ app.patch("/api/installments/:id", async (req, res) => {
       });
     }
 
+    const planPatchCategoryProblem = await getCategoryProblem(
+      parsed.data.category,
+      plan.category,
+    );
+    if (planPatchCategoryProblem) {
+      return res.status(400).json({ error: planPatchCategoryProblem });
+    }
+
     if (parsed.data.name !== undefined) {
       plan.name = parsed.data.name;
     }
@@ -2097,6 +2263,11 @@ app.post("/api/subscriptions", async (req, res) => {
       });
     }
 
+    const subCategoryProblem = await getCategoryProblem(parsed.data.category);
+    if (subCategoryProblem) {
+      return res.status(400).json({ error: subCategoryProblem });
+    }
+
     const { series } = await createRecurringSeriesWithOccurrences(
       userId,
       {
@@ -2136,6 +2307,22 @@ app.patch("/api/subscriptions/:id", async (req, res) => {
         error: "Invalid subscription data.",
         details: parsed.error.flatten(),
       });
+    }
+
+    if (parsed.data.category !== undefined) {
+      const currentSeries = await RecurringSeries.findOne({
+        _id: req.params.id,
+        userId,
+      })
+        .select("category")
+        .lean();
+      const subPatchProblem = await getCategoryProblem(
+        parsed.data.category,
+        currentSeries?.category,
+      );
+      if (subPatchProblem) {
+        return res.status(400).json({ error: subPatchProblem });
+      }
     }
 
     const updated = await updateRecurringSeriesDirectly(
@@ -2432,7 +2619,7 @@ export async function stopServer(options?: {
 }): Promise<void> {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log("Shutting down BillFlow API gracefully...");
+  console.log("Shutting down BillWill API gracefully...");
 
   const timeoutMs = options?.timeoutMs ?? 10000;
   // Reliable shutdown watchdog: do not unref the timer in production.
@@ -2520,13 +2707,14 @@ export async function startServer(): Promise<void> {
   try {
     await connectDB();
     await seedPricingTiersIfEmpty();
+    await seedCategoriesIfEmpty();
 
     server = app.listen(PORT, () => {
-      console.log(`BillFlow API running at http://localhost:${PORT}`);
+      console.log(`BillWill API running at http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error(
-      `Failed to start BillFlow API: ${describeStartupError(error)}\n` +
+      `Failed to start BillWill API: ${describeStartupError(error)}\n` +
         "Check MONGODB_URI, Atlas database user, and Atlas network access.",
     );
     process.exit(1);
@@ -2558,6 +2746,8 @@ export {
   mongoose,
   PricingTier,
   seedPricingTiersIfEmpty,
+  Category,
+  seedCategoriesIfEmpty,
   User,
   isUserAdmin,
   requireAdminAuth,
@@ -2572,4 +2762,4 @@ export {
   installmentPlanUpdateSchema,
   isValidPlanId,
   syncInstallmentPlanBalance,
-};
+};

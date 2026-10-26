@@ -57,7 +57,7 @@ describe("Clerk authorizedParties (real @clerk/express middleware)", () => {
     const env = validateServerEnv({
       NODE_ENV: "production",
       CLIENT_URL: `${FRONTEND}/, ${LOCAL_FRONTEND}`,
-      MONGODB_URI: "mongodb+srv://user:pass@cluster.example.net/billflow",
+      MONGODB_URI: "mongodb+srv://user:pass@cluster.example.net/billwill",
       CLERK_SECRET_KEY: SECRET_KEY,
       CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
     });

@@ -129,7 +129,7 @@ describe("Phase 4D — admin role management over HTTP", () => {
 
   it("accepts only https logo URLs in branding settings", async () => {
     const branding = {
-      brand_name: "BillFlow",
+      brand_name: "BillWill",
       hero_headline: "Headline",
       hero_subheadline: "Subheadline",
       hero_cta_label: "Start",
@@ -151,7 +151,7 @@ describe("Phase 4D — admin role management over HTTP", () => {
       expect(res.status, logo_url.slice(0, 40)).toBe(400);
     }
 
-    const httpsLogo = "https://billflow.s3.us-east-1.amazonaws.com/branding/logo.png";
+    const httpsLogo = "https://billwill.s3.us-east-1.amazonaws.com/branding/logo.png";
     for (const logo_url of [httpsLogo, null]) {
       const res = await harness.request("PATCH", "/api/admin/branding", {
         user: OWNER,

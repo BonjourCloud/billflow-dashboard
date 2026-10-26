@@ -39,7 +39,7 @@ export default function Login() {
         </div>
 
         <h1 className="text-2xl font-bold tracking-tight mb-2">Welcome back</h1>
-        <p className="text-muted-foreground text-sm mb-8">Sign in to access your dashboard</p>
+        <p className="text-muted-foreground text-sm mb-8">Sign in to see what’s due — and what’s done.</p>
 
         <Button
           onClick={signInWithGoogle}

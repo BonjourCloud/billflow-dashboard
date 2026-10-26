@@ -46,7 +46,7 @@ describe("Public read endpoints have no write side effects", () => {
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         id: "default",
-        brand_name: "BillFlow",
+        brand_name: "BillWill",
         logo_url: null,
         logo_display_url: null,
         theme_font_pair: "inter",

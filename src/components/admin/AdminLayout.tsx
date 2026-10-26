@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, IndianRupee, Palette, ImageIcon, ArrowLeft, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, IndianRupee, Palette, ImageIcon, ArrowLeft, LogOut, Users, Tags } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
@@ -9,6 +9,7 @@ const items = [
   { to: '/admin', end: true, icon: LayoutDashboard, label: 'Overview' },
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/pricing', icon: IndianRupee, label: 'Pricing' },
+  { to: '/admin/categories', icon: Tags, label: 'Categories' },
   { to: '/admin/branding', icon: ImageIcon, label: 'Branding' },
   { to: '/admin/theme', icon: Palette, label: 'Theme' },
 ];

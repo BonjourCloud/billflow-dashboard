@@ -32,7 +32,8 @@ import {
   PLAN_STATUS_LABELS,
   InstallmentFilterStatus,
 } from '@/data/installments';
-import { BillCategory, CATEGORIES } from '@/data/bills';
+import { BillCategory } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -45,6 +46,7 @@ import {
 import { formatCurrency } from '@/lib/currency';
 
 export default function Installments() {
+  const { categories, getLabel } = useCategories();
   const navigate = useNavigate();
   const store = useInstallmentStore();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -276,9 +278,9 @@ export default function Installments() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat} className="capitalize">
-                    {cat}
+                {categories.map((cat) => (
+                  <SelectItem key={cat.slug} value={cat.slug}>
+                    {cat.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -388,7 +390,7 @@ export default function Installments() {
                             {plan.name}
                           </h3>
                           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                            <span className="capitalize">{plan.category}</span>
+                            <span>{getLabel(plan.category)}</span>
                             <span>•</span>
                             <span>{PLAN_TYPE_LABELS[plan.planType] || plan.planType}</span>
                           </div>

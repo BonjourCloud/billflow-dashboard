@@ -56,13 +56,16 @@ describe('Subscriptions Backend — Zod Validation Schemas', () => {
     ).toBe(false);
   });
 
-  it('rejects invalid category enum values', () => {
+  it('rejects malformed category slugs (existence is checked against the database)', () => {
+    for (const category of ['Gaming', 'has space', '', '-bad', 'x'.repeat(41)]) {
+      expect(
+        subscriptionCreateSchema.safeParse({ ...validPayload, category }).success,
+        category,
+      ).toBe(false);
+    }
     expect(
-      subscriptionCreateSchema.safeParse({ ...validPayload, category: 'gaming' }).success,
-    ).toBe(false);
-    expect(
-      subscriptionCreateSchema.safeParse({ ...validPayload, category: 'crypto' }).success,
-    ).toBe(false);
+      subscriptionCreateSchema.safeParse({ ...validPayload, category: 'car-emi' }).success,
+    ).toBe(true);
   });
 
   it('rejects empty or excessively long names', () => {

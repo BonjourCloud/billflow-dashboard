@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- mirrors @clerk/react's mixed exports; only used in the e2e build, never with fast refresh */
 /**
- * TEST-ONLY stand-in for the parts of @clerk/react that BillFlow uses.
+ * TEST-ONLY stand-in for the parts of @clerk/react that BillWill uses.
  * Aliased in by vite.e2e.config.ts for the full-stack browser journeys; the
  * production build (vite.config.ts) always uses the real Clerk SDK.
  *
@@ -18,8 +18,8 @@ import {
   type ReactNode,
 } from 'react';
 
-export const E2E_USER_KEY = 'billflow-e2e-user';
-export const E2E_NEXT_USER_KEY = 'billflow-e2e-next-user';
+export const E2E_USER_KEY = 'billwill-e2e-user';
+export const E2E_NEXT_USER_KEY = 'billwill-e2e-next-user';
 
 function read(key: string): string | null {
   try {

@@ -1,4 +1,5 @@
 import mongoose, { type InferSchemaType } from "mongoose";
+import { CATEGORY_SLUG_PATTERN } from "./Category.js";
 
 const recurringSeriesSchema = new mongoose.Schema(
   {
@@ -24,14 +25,7 @@ const recurringSeriesSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: [
-        "utilities",
-        "entertainment",
-        "software",
-        "finance",
-        "insurance",
-        "housing",
-      ],
+      match: CATEGORY_SLUG_PATTERN,
     },
     frequency: {
       type: String,

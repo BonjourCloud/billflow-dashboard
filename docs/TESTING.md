@@ -83,7 +83,7 @@ Playwright (`playwright.config.ts`, specs in `e2e/`). The config builds the prod
 - The API is **not** running. `VITE_API_URL` is set to `https://api.e2e.test` and every request to it is answered inside the browser with fixed JSON (`page.route`).
 - Clerk is **real**: the page loads the Clerk instance from `VITE_CLERK_PUBLISHABLE_KEY` (environment or root `.env`). A development key works.
 
-They check that the landing page renders branding and pricing from the API, that signed-out visitors are redirected from `/dashboard` and `/admin/users` to `/login`, that unknown routes show the 404 page, that the static page metadata and favicons are BillFlow-branded, and that no page errors or unexpected API calls occur.
+They check that the landing page renders branding and pricing from the API, that signed-out visitors are redirected from `/dashboard` and `/admin/users` to `/login`, that unknown routes show the 404 page, that the static page metadata and favicons are BillWill-branded, and that no page errors or unexpected API calls occur.
 
 **First run:** install the browser once with `npx playwright install chromium` (in CI: `npx playwright install --with-deps chromium`).
 

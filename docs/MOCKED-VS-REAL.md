@@ -19,7 +19,7 @@ The app no longer uses mock data: every screen reads and writes through the Expr
 
 | Feature | How it works |
 |---|---|
-| Dashboard insights ("AI Insights" widget) | Rule-based calculations in `src/lib/insights.ts`, run in the browser. No AI or LLM service is called. |
+| Dashboard insights ("Smart Insights" widget) | Rule-based calculations in `src/lib/insights.ts`, run in the browser. No AI or LLM service is called. |
 | Reminders | In-app notifications created when the user loads notifications. No email, SMS, or push. |
 | Recurring bills | Created when the user lists bills, subscriptions, or notifications. There is no background scheduler. |
 | Theme preference | Light/dark choice stored in the browser's `localStorage`; brand colors come from site settings in MongoDB. |

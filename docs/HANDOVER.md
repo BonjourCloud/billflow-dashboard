@@ -1,4 +1,4 @@
-# BillFlow — Technical Handover (Iteration 5)
+# BillWill — Technical Handover (Iteration 5)
 
 For Rajiv. This page summarizes what was verified in Iteration 5, how to run and demonstrate the app, and what remains open. Details live in the linked docs.
 
@@ -14,7 +14,7 @@ For Rajiv. This page summarizes what was verified in Iteration 5, how to run and
 
 ## Verified in Iteration 5
 
-All counts are from the final local run on `feature/billflow-backend`.
+All counts are from the final local run on `feature/billwill-backend`.
 
 | Check | Command | Result |
 |---|---|---|

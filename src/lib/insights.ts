@@ -1,3 +1,4 @@
+import { prettifyCategorySlug } from '@/data/categories';
 import { Bill, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
 import { InstallmentPlan } from '@/data/installments';
@@ -30,8 +31,7 @@ export function parseDateUtc(dateInput: string | Date): Date {
 export { formatCurrency };
 
 export function formatCategory(category: string): string {
-  if (!category) return '';
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return prettifyCategorySlug(category);
 }
 
 /**

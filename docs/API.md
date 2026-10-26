@@ -50,7 +50,7 @@ Request bodies are validated strictly: unknown fields (including `userId`) are r
 | PATCH | `/api/bills/:id` | user | Any of the above plus `updateScope: "this" \| "future"` for recurring bills |
 | DELETE | `/api/bills/:id?scope=this\|future\|all` | user | `204`. Paid occurrences are never deleted by `future`. Installment bills return `400` (cancel the plan instead). |
 
-`status`: `paid`, `pending`, `overdue`. `category`: `utilities`, `entertainment`, `software`, `finance`, `insurance`, `housing`.
+`status`: `paid`, `pending`, `overdue`. `category`: `utilities`, `entertainment`, `software`, `finance`, `insurance`, `housing`, `loans`, `transport`, `health`, `education`, `groceries`.
 
 ## Payments and notes
 

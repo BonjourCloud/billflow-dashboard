@@ -1,3 +1,4 @@
+import { DEFAULT_CATEGORIES } from './categories';
 import { Bill, BillCategory } from './bills';
 
 export const PLAN_TYPES = [
@@ -19,14 +20,7 @@ export type PlanStatus = (typeof PLAN_STATUSES)[number];
 
 export type PlanCategory = BillCategory;
 
-export const PLAN_CATEGORIES: PlanCategory[] = [
-  'utilities',
-  'entertainment',
-  'software',
-  'finance',
-  'insurance',
-  'housing',
-];
+export const PLAN_CATEGORIES: PlanCategory[] = DEFAULT_CATEGORIES.map((c) => c.slug);
 
 export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
   car_loan: 'Car Loan',

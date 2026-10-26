@@ -1,0 +1,18 @@
+# Frontend image build context (repository root). The API has its own
+# server/.dockerignore and is built from server/.
+node_modules
+server
+dist
+.git
+.github
+.env
+.env.*
+!.env.example
+e2e
+docs
+playwright-report
+test-results
+coverage
+*.log
+Dockerfile
+.dockerignore

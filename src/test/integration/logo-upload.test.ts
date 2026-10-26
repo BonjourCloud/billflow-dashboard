@@ -12,7 +12,7 @@ const { s3State, sendMock } = vi.hoisted(() => ({
 vi.mock("../../../server/src/config/s3", () => ({
   isS3Configured: () => s3State.configured,
   getS3Client: () => ({ send: sendMock }),
-  s3Bucket: "billflow-test-bucket",
+  s3Bucket: "billwill-test-bucket",
   resetS3ClientForTesting: () => {},
 }));
 
@@ -80,13 +80,13 @@ describe("Logo upload validation over HTTP", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.url).toMatch(
       new RegExp(
-        `^https://billflow-test-bucket\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/branding/[0-9a-f-]{36}\\.${extension}$`,
+        `^https://billwill-test-bucket\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/branding/[0-9a-f-]{36}\\.${extension}$`,
       ),
     );
     expect(sendMock).toHaveBeenCalledTimes(1);
     const input = sendMock.mock.calls[0][0].input;
     expect(input).toMatchObject({
-      Bucket: "billflow-test-bucket",
+      Bucket: "billwill-test-bucket",
       ContentType: type,
       CacheControl: "private, max-age=3600",
     });

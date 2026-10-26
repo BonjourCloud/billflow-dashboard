@@ -13,27 +13,27 @@ const siteSettingsSchema = new mongoose.Schema(
     brand_name: {
       type: String,
       required: true,
-      default: "BillFlow",
+      default: "BillWill",
       maxlength: 40,
     },
     logo_url: { type: String, default: null },
     hero_headline: {
       type: String,
       required: true,
-      default: "Take Control of Your Financial Life",
+      default: "Where there’s a Bill, there’s a Will.",
       maxlength: 120,
     },
     hero_subheadline: {
       type: String,
       required: true,
       default:
-        "Track bills, manage subscriptions, and unlock AI-driven spending insights — all in one beautiful, intuitive dashboard.",
+        "Track every bill, subscription and EMI in one calm dashboard — so you always know what’s due, what’s paid, and what’s next.",
       maxlength: 400,
     },
     hero_cta_label: {
       type: String,
       required: true,
-      default: "Start Free — No Card Needed",
+      default: "Get Early Access",
       maxlength: 40,
     },
     theme_primary_hsl: {

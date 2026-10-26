@@ -46,7 +46,7 @@ export async function startHarness(): Promise<Harness> {
   const replSet = await MongoMemoryReplSet.create({
     replSet: { count: 1, storageEngine: "wiredTiger" },
   });
-  await mongoose.connect(replSet.getUri("billflow-test"));
+  await mongoose.connect(replSet.getUri("billwill-test"));
   // Build unique/partial indexes up front so idempotency checks are enforced.
   await Promise.all(
     mongoose.modelNames().map((name) => mongoose.model(name).init()),

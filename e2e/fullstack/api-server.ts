@@ -29,7 +29,7 @@ const { clerkClient } = await import("../../server/node_modules/@clerk/express/d
 const { default: express } = await import("../../server/node_modules/express/index.js");
 const { default: cors } = await import("../../server/node_modules/cors/lib/index.js");
 
-await mongoose.connect(replSet.getUri("billflow-e2e"));
+await mongoose.connect(replSet.getUri("billwill-e2e"));
 await Promise.all(mongoose.modelNames().map((name) => mongoose.model(name).init()));
 await seedPricingTiersIfEmpty();
 

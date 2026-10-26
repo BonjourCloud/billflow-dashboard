@@ -5,7 +5,6 @@ import {
   installmentPlanUpdateSchema,
   isValidPlanId,
   PLAN_TYPES,
-  PLAN_CATEGORIES,
 } from "../../server/src/models/InstallmentPlan";
 import { calculateOccurrenceDueDate } from "../../server/src/services/recurrenceService";
 import { isValidBillId } from "../../server/src/models/Bill";
@@ -122,7 +121,7 @@ describe("Phase 3B — Installment Plan Schemas & Validation", () => {
     }
   });
 
-  it("applies defaults for optional fields (downPayment=0, interestRate=0, planType='other', category='finance')", () => {
+  it("applies defaults for optional fields (downPayment=0, interestRate=0, planType='other', category unset)", () => {
     const minimal = {
       name: "MacBook Pro EMI",
       principalAmount: 2400,
@@ -136,7 +135,8 @@ describe("Phase 3B — Installment Plan Schemas & Validation", () => {
       expect(result.data.downPayment).toBe(0);
       expect(result.data.interestRate).toBe(0);
       expect(result.data.planType).toBe("other");
-      expect(result.data.category).toBe("finance");
+      // The API fills in the default category from the database when none is sent.
+      expect(result.data.category).toBeUndefined();
     }
   });
 

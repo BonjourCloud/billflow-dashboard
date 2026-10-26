@@ -9,7 +9,7 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export function DashboardHeader() {
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('billflow_theme');
+    const saved = localStorage.getItem('billwill_theme');
     if (saved === 'light') return false;
     if (saved === 'dark') return true;
     return !document.documentElement.classList.contains('light');
@@ -21,7 +21,7 @@ export function DashboardHeader() {
   const { settings } = useSiteSettings();
 
   useEffect(() => {
-    localStorage.setItem('billflow_theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('billwill_theme', isDark ? 'dark' : 'light');
     if (!isDark) {
       document.documentElement.classList.add('light');
       document.documentElement.style.removeProperty('--background');

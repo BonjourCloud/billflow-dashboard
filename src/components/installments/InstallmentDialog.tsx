@@ -28,14 +28,13 @@ import {
   PlanType,
   PlanCategory,
   PLAN_TYPES,
-  PLAN_CATEGORIES,
   PLAN_TYPE_LABELS,
   CreateInstallmentPlanInput,
   UpdateInstallmentPlanInput,
   calculateInstallmentPlanTotals,
 } from '@/data/installments';
 import { formatCurrency } from '@/lib/currency';
-import { CATEGORIES } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 
 interface InstallmentDialogProps {
   open: boolean;
@@ -59,6 +58,7 @@ export function InstallmentDialog({
   // Form Fields
   const [name, setName] = useState('');
   const [planType, setPlanType] = useState<PlanType>('car_loan');
+  const { optionsFor } = useCategories();
   const [category, setCategory] = useState<PlanCategory>('finance');
   const [principalAmount, setPrincipalAmount] = useState('');
   const [downPayment, setDownPayment] = useState('0');
@@ -287,9 +287,9 @@ export function InstallmentDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PLAN_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="capitalize">
-                      {cat}
+                  {optionsFor(category).map((cat) => (
+                    <SelectItem key={cat.slug} value={cat.slug}>
+                      {cat.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

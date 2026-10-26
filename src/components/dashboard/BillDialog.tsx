@@ -10,7 +10,8 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Repeat, Calendar, Info, CalendarIcon } from 'lucide-react';
 import { format, parse, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
+import { Bill, BillStatus, BillCategory, STATUSES } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 
 interface BillDialogProps {
   open: boolean;
@@ -32,6 +33,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<BillStatus>('pending');
+  const { optionsFor } = useCategories();
   const [category, setCategory] = useState<BillCategory>('utilities');
   const [recurrenceType, setRecurrenceType] = useState<'one_time' | 'recurring'>('one_time');
   const [updateScope, setUpdateScope] = useState<'this' | 'future'>('this');
@@ -264,9 +266,9 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map(c => (
-                    <SelectItem key={c} value={c} className="capitalize">
-                      {c}
+                  {optionsFor(category).map(c => (
+                    <SelectItem key={c.slug} value={c.slug}>
+                      {c.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

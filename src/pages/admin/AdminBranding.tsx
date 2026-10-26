@@ -144,7 +144,7 @@ export default function AdminBranding() {
                 {logoPreviewUrl ? (
                   <img
                     src={logoPreviewUrl}
-                    alt="BillFlow logo preview"
+                    alt="BillWill logo preview"
                     className="w-full h-full object-contain"
                   />
                 ) : (

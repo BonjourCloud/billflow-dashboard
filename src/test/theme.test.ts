@@ -8,7 +8,7 @@ describe("Theme Toggle & Background Resolution", () => {
   });
 
   const applyTheme = (isDark: boolean, settingsBackground: string) => {
-    localStorage.setItem("billflow_theme", isDark ? "dark" : "light");
+    localStorage.setItem("billwill_theme", isDark ? "dark" : "light");
     if (!isDark) {
       document.documentElement.classList.add("light");
       document.documentElement.style.removeProperty("--background");
@@ -31,7 +31,7 @@ describe("Theme Toggle & Background Resolution", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true);
     // Crucial fix: inline style must be removed so .light CSS rule can take effect
     expect(document.documentElement.style.getPropertyValue("--background")).toBe("");
-    expect(localStorage.getItem("billflow_theme")).toBe("light");
+    expect(localStorage.getItem("billwill_theme")).toBe("light");
   });
 
   it("restores dark theme background when switching back to dark theme", () => {
@@ -44,7 +44,7 @@ describe("Theme Toggle & Background Resolution", () => {
 
     expect(document.documentElement.classList.contains("light")).toBe(false);
     expect(document.documentElement.style.getPropertyValue("--background")).toBe("222 47% 4%");
-    expect(localStorage.getItem("billflow_theme")).toBe("dark");
+    expect(localStorage.getItem("billwill_theme")).toBe("dark");
   });
 
   it("handles repeated toggling without leaking inline background styles in light mode", () => {
@@ -60,8 +60,8 @@ describe("Theme Toggle & Background Resolution", () => {
   });
 
   it("retains light theme selection from localStorage", () => {
-    localStorage.setItem("billflow_theme", "light");
-    const saved = localStorage.getItem("billflow_theme");
+    localStorage.setItem("billwill_theme", "light");
+    const saved = localStorage.getItem("billwill_theme");
     const isDark = saved === "dark";
 
     applyTheme(isDark, "222 47% 4%");

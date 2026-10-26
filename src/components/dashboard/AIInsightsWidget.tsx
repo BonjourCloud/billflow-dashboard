@@ -30,7 +30,7 @@ export function AIInsightsWidget({ bills = [], isLoading = false }: AIInsightsWi
           <Sparkles className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <h3 className="font-semibold text-sm">AI Insights</h3>
+          <h3 className="font-semibold text-sm">Smart Insights</h3>
           <p className="text-xs text-muted-foreground">Smart analysis of your bills</p>
         </div>
       </div>

@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/select';
 import { Repeat, Info } from 'lucide-react';
 import { Subscription } from '@/data/subscriptions';
-import { BillCategory, CATEGORIES } from '@/data/bills';
+import { BillCategory } from '@/data/bills';
+import { useCategories } from '@/hooks/useCategories';
 
 interface SubscriptionDialogProps {
   open: boolean;
@@ -58,6 +59,7 @@ export function SubscriptionDialog({
 }: SubscriptionDialogProps) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const { optionsFor } = useCategories();
   const [category, setCategory] = useState<BillCategory>('software');
   const [startDate, setStartDate] = useState('');
   const [recurringDay, setRecurringDay] = useState<number | ''>('');
@@ -194,9 +196,9 @@ export function SubscriptionDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c} className="capitalize">
-                      {c}
+                  {optionsFor(category).map((c) => (
+                    <SelectItem key={c.slug} value={c.slug}>
+                      {c.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

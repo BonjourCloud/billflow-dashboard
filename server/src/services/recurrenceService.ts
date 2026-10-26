@@ -3,19 +3,13 @@ import { z } from "zod";
 import { Bill, type BillDocument } from "../models/Bill.js";
 import { RecurringSeries, type RecurringSeriesDocument } from "../models/RecurringSeries.js";
 import { Notification } from "../models/Notification.js";
+import { categorySlugSchema } from "../models/Category.js";
 
 export const subscriptionCreateSchema = z
   .object({
     name: z.string().trim().min(1, "Subscription name is required.").max(100),
     amount: z.number().positive("Amount must be a positive number."),
-    category: z.enum([
-      "utilities",
-      "entertainment",
-      "software",
-      "finance",
-      "insurance",
-      "housing",
-    ]),
+    category: categorySlugSchema,
     recurringDay: z.number().int().min(1).max(31).optional(),
     startDate: z
       .string()
@@ -37,16 +31,7 @@ export const subscriptionUpdateSchema = z
   .object({
     name: z.string().trim().min(1, "Subscription name is required.").max(100).optional(),
     amount: z.number().positive("Amount must be a positive number.").optional(),
-    category: z
-      .enum([
-        "utilities",
-        "entertainment",
-        "software",
-        "finance",
-        "insurance",
-        "housing",
-      ])
-      .optional(),
+    category: categorySlugSchema.optional(),
     recurringDay: z.number().int().min(1).max(31).optional(),
   })
   .strict();
@@ -281,13 +266,7 @@ export async function createRecurringSeriesWithOccurrences(
   data: {
     name: string;
     amount: number;
-    category:
-      | "utilities"
-      | "entertainment"
-      | "software"
-      | "finance"
-      | "insurance"
-      | "housing";
+    category: string;
     dueDate: Date;
     recurringDay?: number;
     initialStatus?: "paid" | "pending" | "overdue";
@@ -572,13 +551,7 @@ export async function updateRecurringSeriesDirectly(
   updates: {
     name?: string;
     amount?: number;
-    category?:
-      | "utilities"
-      | "entertainment"
-      | "software"
-      | "finance"
-      | "insurance"
-      | "housing";
+    category?: string;
     recurringDay?: number;
   },
   referenceDate: Date = new Date(),

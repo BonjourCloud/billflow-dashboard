@@ -16,8 +16,8 @@ function uniqueUser(testInfo: TestInfo, label: string): string {
 
 async function signInAs(page: Page, userId: string) {
   await page.addInitScript((id) => {
-    localStorage.setItem("billflow-e2e-user", id);
-    localStorage.setItem("billflow-e2e-next-user", id);
+    localStorage.setItem("billwill-e2e-user", id);
+    localStorage.setItem("billwill-e2e-next-user", id);
   }, userId);
 }
 
@@ -55,7 +55,7 @@ function trackPageErrors(page: Page) {
 test("signs in from the landing page and signs out", async ({ page }, testInfo) => {
   const errors = trackPageErrors(page);
   const user = uniqueUser(testInfo, "auth");
-  await page.addInitScript((id) => localStorage.setItem("billflow-e2e-next-user", id), user);
+  await page.addInitScript((id) => localStorage.setItem("billwill-e2e-next-user", id), user);
 
   await page.goto("/");
   await expectNoHorizontalOverflow(page, "landing");

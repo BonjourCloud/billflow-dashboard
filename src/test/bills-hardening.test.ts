@@ -31,6 +31,11 @@ const billBodySchema = z
       "finance",
       "insurance",
       "housing",
+      "loans",
+      "transport",
+      "health",
+      "education",
+      "groceries",
     ]),
     isSubscription: z.boolean(),
   })

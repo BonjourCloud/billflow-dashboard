@@ -170,13 +170,13 @@ describe("Phase 4E — startup failure reporting", () => {
   it("redacts credentials embedded in MongoDB connection strings", () => {
     const summary = describeStartupError(
       new Error(
-        "Invalid URI mongodb+srv://app_user:s3cr3t@cluster0.example.net/billflow and mongodb://root:pw@localhost:27017",
+        "Invalid URI mongodb+srv://app_user:s3cr3t@cluster0.example.net/billwill and mongodb://root:pw@localhost:27017",
       ),
     );
 
     expect(summary).not.toContain("s3cr3t");
     expect(summary).not.toContain("root:pw");
-    expect(summary).toContain("mongodb+srv://***@cluster0.example.net/billflow");
+    expect(summary).toContain("mongodb+srv://***@cluster0.example.net/billwill");
     expect(summary).toContain("mongodb://***@localhost:27017");
   });
 
@@ -192,7 +192,7 @@ describe("Phase 4E — startup failure reporting", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     const logged = consoleSpy.mock.calls.map((call) => String(call[0])).join("\n");
     expect(logged).toContain(
-      "Failed to start BillFlow API: Error: MONGODB_URI is missing from the environment variables.",
+      "Failed to start BillWill API: Error: MONGODB_URI is missing from the environment variables.",
     );
   });
 });

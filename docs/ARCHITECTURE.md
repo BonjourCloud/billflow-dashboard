@@ -2,7 +2,7 @@
 
 ## Overview
 
-BillFlow is a React single-page app backed by an Express + MongoDB API. Clerk handles sign-in; S3 optionally stores branding logos.
+BillWill is a React single-page app backed by an Express + MongoDB API. Clerk handles sign-in; S3 optionally stores branding logos.
 
 ```text
 ┌──────────────────────┐   HTTPS + Bearer token   ┌──────────────────────────┐
@@ -105,7 +105,7 @@ The environment is validated when the server module loads (skipped when `NODE_EN
 - **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
 - **API access** (`src/lib/api.ts`): adds `Authorization: Bearer <Clerk token>` unless a call is marked unauthenticated, and turns API JSON errors into thrown `Error`s with the server's message.
 - **Data hooks** (`src/hooks/`): one hook per feature, using TanStack Query or local state over the API. Notifications poll every 60 seconds.
-- **Branding and theme** come from `GET /api/site-settings` (schema defaults until an admin first saves) and are applied as CSS variables and the document title; light/dark preference is stored in `localStorage`. `index.html` carries static BillFlow metadata for crawlers and link previews.
+- **Branding and theme** come from `GET /api/site-settings` (schema defaults until an admin first saves) and are applied as CSS variables and the document title; light/dark preference is stored in `localStorage`. `index.html` carries static BillWill metadata for crawlers and link previews.
 - **Insights** (`src/lib/insights.ts`) are computed in the browser from the user's bills, payments, and plans with fixed rules. No AI or LLM service is called.
 
 ## Configuration

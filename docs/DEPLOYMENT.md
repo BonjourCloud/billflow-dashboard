@@ -1,6 +1,6 @@
 # Deployment & Production Guide
 
-BillFlow deploys as three pieces:
+BillWill deploys as three pieces:
 
 | Piece | Where | Config in repo |
 |---|---|---|
@@ -10,7 +10,7 @@ BillFlow deploys as three pieces:
 
 Authentication uses Clerk, and optional branding-logo uploads use a private AWS S3 bucket.
 
-> **Status (Iteration 5):** BillFlow has **not been deployed yet**; no Vercel project, Render service, Atlas cluster, or production Clerk instance has been connected from this repository. What has been verified locally: the compiled API started exactly as Render runs it (`npm start`, `NODE_ENV=production`, `TRUST_PROXY=1`) against a MongoDB replica set, with `/api/health` and `/api/ready` returning `200`, JSON `401`/`404`/`400` errors, CORS limited to `CLIENT_URL`, Helmet security headers, rate-limit headers, and no secrets in its logs. The configuration is also checked by CI and the tests in [TESTING.md](TESTING.md). Use the post-deploy checklist at the end the first time you deploy.
+> **Status (Iteration 5):** BillWill has **not been deployed yet**; no Vercel project, Render service, Atlas cluster, or production Clerk instance has been connected from this repository. What has been verified locally: the compiled API started exactly as Render runs it (`npm start`, `NODE_ENV=production`, `TRUST_PROXY=1`) against a MongoDB replica set, with `/api/health` and `/api/ready` returning `200`, JSON `401`/`404`/`400` errors, CORS limited to `CLIENT_URL`, Helmet security headers, rate-limit headers, and no secrets in its logs. The configuration is also checked by CI and the tests in [TESTING.md](TESTING.md). Use the post-deploy checklist at the end the first time you deploy.
 
 ## Recommended order
 
@@ -39,7 +39,7 @@ Add the domains in each platform's dashboard (Vercel → Project → Domains; Re
 ## 1. MongoDB Atlas
 
 1. Create a cluster. Atlas clusters are replica sets, so installment-plan creation runs inside a MongoDB transaction (the API falls back to a non-transactional path with manual cleanup only on standalone servers).
-2. Create a database user with read/write access to the BillFlow database.
+2. Create a database user with read/write access to the BillWill database.
 3. Network access: allow the Render service's outbound IP addresses (listed in the Render dashboard for your service). Allowing `0.0.0.0/0` also works but relies entirely on the database credentials.
 4. Copy the `mongodb+srv://…` connection string, include the database name in the path, and store it only as the `MONGODB_URI` secret on Render.
 
@@ -54,7 +54,7 @@ On startup the API connects, seeds the default pricing tiers if the collection i
 
 ## 3. Backend on Render
 
-[`render.yaml`](../render.yaml) is a Render Blueprint for a Node web service named `billflow-api`:
+[`render.yaml`](../render.yaml) is a Render Blueprint for a Node web service named `billwill-api`:
 
 | Setting | Value | Why |
 |---|---|---|
@@ -104,7 +104,7 @@ Counters are kept in each instance's memory. With a single instance this is exac
 
 1. Import the repository in Vercel (project root = repository root).
 2. Set these environment variables for Production (and Preview, if used):
-   - `VITE_API_URL` — the API origin, `https://api.billwill.site` (or the raw Render URL such as `https://billflow-api.onrender.com` before the custom domain resolves). No trailing path.
+   - `VITE_API_URL` — the API origin, `https://api.billwill.site` (or the raw Render URL such as `https://billwill-api.onrender.com` before the custom domain resolves). No trailing path.
    - `VITE_CLERK_PUBLISHABLE_KEY` — the Clerk publishable key.
 3. Deploy.
 
@@ -131,7 +131,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 |---|---|---|
 | `NODE_ENV` | — | `development` (default), `production`, or `test` |
 | `PORT` | — | Default `5001`; Render injects its own |
-| `CLIENT_URL` | Production | Allowed frontend origin(s), comma-separated, no paths (e.g. `https://billflow.vercel.app`). Used for CORS and Clerk's authorized parties. Defaults to `http://localhost:8080` outside production. |
+| `CLIENT_URL` | Production | Allowed frontend origin(s), comma-separated, no paths (e.g. `https://billwill.vercel.app`). Used for CORS and Clerk's authorized parties. Defaults to `http://localhost:8080` outside production. |
 | `MONGODB_URI` | Yes | Must start with `mongodb://` or `mongodb+srv://` |
 | `CLERK_SECRET_KEY` | Yes | `sk_test_…` or `sk_live_…` |
 | `CLERK_PUBLISHABLE_KEY` | Yes | Same key as the frontend |

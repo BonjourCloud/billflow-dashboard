@@ -22,6 +22,7 @@ const InstallmentDetail = lazy(() => import("./pages/InstallmentDetail"));
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminPricing = lazy(() => import("./pages/admin/AdminPricing"));
+const AdminCategories = lazy(() => import("./pages/admin/AdminCategories"));
 const AdminBranding = lazy(() => import("./pages/admin/AdminBranding"));
 const AdminTheme = lazy(() => import("./pages/admin/AdminTheme"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
@@ -55,6 +56,7 @@ const App = () => (
                   <Route index element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="pricing" element={<AdminPricing />} />
+                  <Route path="categories" element={<AdminCategories />} />
                   <Route path="branding" element={<AdminBranding />} />
                   <Route path="theme" element={<AdminTheme />} />
                 </Route>

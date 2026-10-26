@@ -1,5 +1,7 @@
+import { DEFAULT_CATEGORIES } from './categories';
 export type BillStatus = 'paid' | 'pending' | 'overdue';
-export type BillCategory = 'utilities' | 'entertainment' | 'software' | 'finance' | 'insurance' | 'housing';
+/** A category slug. Categories are managed in the database (Admin → Categories). */
+export type BillCategory = string;
 
 export interface Bill {
   _id: string;
@@ -18,5 +20,6 @@ export interface Bill {
   totalInstallments?: number | null;
 }
 
-export const CATEGORIES: BillCategory[] = ['utilities', 'entertainment', 'software', 'finance', 'insurance', 'housing'];
+/** Built-in slugs only; UI dropdowns should use useCategories() instead. */
+export const CATEGORIES: BillCategory[] = DEFAULT_CATEGORIES.map((c) => c.slug);
 export const STATUSES: BillStatus[] = ['paid', 'pending', 'overdue'];
