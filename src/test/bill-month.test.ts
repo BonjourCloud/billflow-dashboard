@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { Bill } from '@/data/bills';
+import type { Subscription } from '@/data/subscriptions';
 import type { PaymentRecord } from '@/data/billDetails';
 import { calculateBillStats } from '@/hooks/useBillStore';
 import {
   currentMonthKey,
   formatMonthLabel,
+  projectRecurringBills,
   scopeBillsToMonth,
   scopePaymentsToBills,
   shiftMonth,
@@ -84,5 +86,49 @@ describe('scopePaymentsToBills', () => {
     } as PaymentRecord);
     const kept = scopePaymentsToBills([pay('1', 'paid'), pay('2', 'school')], [octPaid]);
     expect(kept.map((p) => p._id)).toEqual(['1']);
+  });
+});
+
+describe('projectRecurringBills', () => {
+  const series = (over: Partial<Subscription> = {}): Subscription => ({
+    _id: 's1', userId: 'u', name: 'Rent', amount: 20000, category: 'housing', frequency: 'monthly',
+    recurringDay: 5, startDate: '2026-10-05T00:00:00.000Z', endDate: null, isActive: true,
+    skippedCycles: [], ...over,
+  });
+  const DEC = { year: 2026, month: 11 };
+
+  it('projects an active series into a month that has no occurrence yet', () => {
+    const [p] = projectRecurringBills([series()], [], DEC, NOW);
+    expect(p).toMatchObject({ name: 'Rent', amount: 20000, status: 'pending', billingCycle: '2026-12' });
+    expect(p.dueDate).toBe('2026-12-05T00:00:00.000Z');
+  });
+
+  it('adds recurring rent to December on top of the one-time school fee', () => {
+    const scope = scopeBillsToMonth(all, DEC, NOW);
+    const bills = [...scope.bills, ...projectRecurringBills([series()], all, DEC, NOW)];
+    expect(calculateBillStats(bills, []).totalAmount).toBe(135000 + 20000);
+  });
+
+  it('does not project the current month or earlier (those are real bills)', () => {
+    expect(projectRecurringBills([series()], [], OCT, NOW)).toEqual([]);
+    expect(projectRecurringBills([series()], [], { year: 2026, month: 8 }, NOW)).toEqual([]);
+  });
+
+  it('skips a month that already has a real occurrence', () => {
+    const real = { ...bill('r', '2026-11-05T00:00:00.000Z', 20000), seriesId: 's1', billingCycle: '2026-11' };
+    expect(projectRecurringBills([series()], [real], { year: 2026, month: 10 }, NOW)).toEqual([]);
+  });
+
+  it('respects inactive, skipped, start and end dates', () => {
+    expect(projectRecurringBills([series({ isActive: false })], [], DEC, NOW)).toEqual([]);
+    expect(projectRecurringBills([series({ skippedCycles: ['2026-12'] })], [], DEC, NOW)).toEqual([]);
+    expect(projectRecurringBills([series({ startDate: '2027-02-01T00:00:00.000Z' })], [], DEC, NOW)).toEqual([]);
+    expect(projectRecurringBills([series({ endDate: '2026-11-30T00:00:00.000Z' })], [], DEC, NOW)).toEqual([]);
+  });
+
+  it('clamps day 31 to the last day of a shorter month', () => {
+    const feb = { year: 2027, month: 1 };
+    const [p] = projectRecurringBills([series({ recurringDay: 31 })], [], feb, NOW);
+    expect(p.dueDate).toBe('2027-02-28T00:00:00.000Z');
   });
 });

@@ -1,5 +1,6 @@
 import type { Bill } from '@/data/bills';
 import type { PaymentRecord } from '@/data/billDetails';
+import type { Subscription } from '@/data/subscriptions';
 
 /** A calendar month. `month` is 0-11 (like Date#getMonth). */
 export interface MonthKey {
@@ -82,4 +83,64 @@ export function scopePaymentsToBills(
 ): PaymentRecord[] {
   const ids = new Set(bills.map((b) => String(b._id)));
   return payments.filter((p) => p.billId && ids.has(String(p.billId)));
+}
+
+/**
+ * Recurring bills are only created in the database up to next month. For any
+ * later month, build the occurrences each active recurring series will have
+ * so the month's total reflects rent, electricity and the like before they
+ * actually exist. These are in-memory only and always "pending".
+ */
+export function projectRecurringBills(
+  series: Subscription[],
+  existingBills: Bill[],
+  selected: MonthKey,
+  now: Date = new Date(),
+): Bill[] {
+  const current = currentMonthKey(now);
+  const selectedIndex = selected.year * 12 + selected.month;
+  if (selectedIndex <= current.year * 12 + current.month) return [];
+
+  const cycleKey = `${selected.year}-${String(selected.month + 1).padStart(2, '0')}`;
+  const existing = new Set(
+    existingBills
+      .filter((b) => b.seriesId && b.billingCycle)
+      .map((b) => `${b.seriesId}|${b.billingCycle}`),
+  );
+
+  const maxDays = new Date(Date.UTC(selected.year, selected.month + 1, 0)).getUTCDate();
+  const projected: Bill[] = [];
+
+  for (const s of series) {
+    if (!s.isActive) continue;
+    if (s.skippedCycles?.includes(cycleKey)) continue;
+    if (existing.has(`${s._id}|${cycleKey}`)) continue;
+
+    const due = new Date(
+      Date.UTC(selected.year, selected.month, Math.min(Math.max(1, s.recurringDay), maxDays)),
+    );
+    const start = new Date(s.startDate);
+    const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    if (Number.isNaN(start.getTime()) || due.getTime() < startDay) continue;
+    if (s.endDate) {
+      const end = new Date(s.endDate);
+      const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+      if (!Number.isNaN(end.getTime()) && due.getTime() > endDay) continue;
+    }
+
+    projected.push({
+      _id: `projected:${s._id}:${cycleKey}`,
+      name: s.name,
+      amount: s.amount,
+      dueDate: due.toISOString(),
+      status: 'pending',
+      category: s.category,
+      isSubscription: true,
+      recurrenceType: 'recurring',
+      seriesId: s._id,
+      billingCycle: cycleKey,
+    });
+  }
+
+  return projected;
 }

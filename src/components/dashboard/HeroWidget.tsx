@@ -16,12 +16,13 @@ interface HeroWidgetProps {
   monthLabel?: string;
   isCurrentMonth?: boolean;
   carriedOverCount?: number;
+  projectedCount?: number;
   onPrevMonth?: () => void;
   onNextMonth?: () => void;
   onCurrentMonth?: () => void;
 }
 
-export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmount, paidPercent, paidCount, pendingCount, overdueCount, monthLabel, isCurrentMonth = true, carriedOverCount = 0, onPrevMonth, onNextMonth, onCurrentMonth }: HeroWidgetProps) {
+export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmount, paidPercent, paidCount, pendingCount, overdueCount, monthLabel, isCurrentMonth = true, carriedOverCount = 0, projectedCount = 0, onPrevMonth, onNextMonth, onCurrentMonth }: HeroWidgetProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -52,6 +53,11 @@ export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmou
         <div className="mt-3 text-5xl font-bold font-mono-data tracking-tighter">
           {formatCurrency(totalAmount)}
         </div>
+        {projectedCount > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Includes {projectedCount} expected recurring {projectedCount === 1 ? 'bill' : 'bills'} not yet created
+          </p>
+        )}
         {carriedOverCount > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
             Includes {carriedOverCount} unpaid {carriedOverCount === 1 ? 'bill' : 'bills'} from earlier months

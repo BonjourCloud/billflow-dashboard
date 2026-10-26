@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bill, BillStatus, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
+import type { Subscription } from '@/data/subscriptions';
 import { apiRequest } from '@/lib/api';
 import { toast } from 'sonner';
 import {
@@ -9,6 +10,7 @@ import {
   currentMonthKey,
   formatMonthLabel,
   isSameMonth,
+  projectRecurringBills,
   scopeBillsToMonth,
   scopePaymentsToBills,
   shiftMonth,
@@ -110,7 +112,14 @@ export function useBillStore() {
     queryFn: () => apiRequest<PaymentRecord[]>('/api/payments'),
   });
 
+  // Shares the cache with the Subscriptions page; used to project future months.
+  const { data: seriesData } = useQuery<Subscription[]>({
+    queryKey: ['subscriptions'],
+    queryFn: () => apiRequest<Subscription[]>('/api/subscriptions'),
+  });
+
   const bills = useMemo(() => billsData ?? [], [billsData]);
+  const recurringSeries = useMemo(() => seriesData ?? [], [seriesData]);
   const payments = useMemo(() => paymentsData ?? [], [paymentsData]);
 
   const [filterStatus, setFilterStatus] = useState<BillStatus | 'all'>('all');
@@ -203,10 +212,15 @@ export function useBillStore() {
   // The hero card shows one month at a time (default: the current month).
   const [selectedMonth, setSelectedMonth] = useState<MonthKey>(() => currentMonthKey());
 
-  const monthScope = useMemo(
-    () => scopeBillsToMonth(bills, selectedMonth),
-    [bills, selectedMonth],
-  );
+  const monthScope = useMemo(() => {
+    const scope = scopeBillsToMonth(bills, selectedMonth);
+    const projected = projectRecurringBills(recurringSeries, bills, selectedMonth);
+    return {
+      bills: [...scope.bills, ...projected],
+      carriedOverCount: scope.carriedOverCount,
+      projectedCount: projected.length,
+    };
+  }, [bills, recurringSeries, selectedMonth]);
 
   const stats = useMemo(
     () =>
@@ -222,11 +236,12 @@ export function useBillStore() {
       monthLabel: formatMonthLabel(selectedMonth),
       isCurrentMonth: isSameMonth(selectedMonth, currentMonthKey()),
       carriedOverCount: monthScope.carriedOverCount,
+      projectedCount: monthScope.projectedCount,
       onPrevMonth: () => setSelectedMonth((m) => shiftMonth(m, -1)),
       onNextMonth: () => setSelectedMonth((m) => shiftMonth(m, 1)),
       onCurrentMonth: () => setSelectedMonth(currentMonthKey()),
     }),
-    [selectedMonth, monthScope.carriedOverCount],
+    [selectedMonth, monthScope.carriedOverCount, monthScope.projectedCount],
   );
 
   const upcomingBills = useMemo(() =>
