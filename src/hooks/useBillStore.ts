@@ -4,6 +4,15 @@ import { Bill, BillStatus, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
 import { apiRequest } from '@/lib/api';
 import { toast } from 'sonner';
+import {
+  MonthKey,
+  currentMonthKey,
+  formatMonthLabel,
+  isSameMonth,
+  scopeBillsToMonth,
+  scopePaymentsToBills,
+  shiftMonth,
+} from '@/lib/billMonth';
 
 export interface BillStoreStats {
   totalAmount: number;
@@ -191,9 +200,33 @@ export function useBillStore() {
     return result;
   }, [bills, filterStatus, filterCategory, sortBy, sortOrder, searchQuery]);
 
+  // The hero card shows one month at a time (default: the current month).
+  const [selectedMonth, setSelectedMonth] = useState<MonthKey>(() => currentMonthKey());
+
+  const monthScope = useMemo(
+    () => scopeBillsToMonth(bills, selectedMonth),
+    [bills, selectedMonth],
+  );
+
   const stats = useMemo(
-    () => calculateBillStats(bills, payments),
-    [bills, payments],
+    () =>
+      calculateBillStats(
+        monthScope.bills,
+        scopePaymentsToBills(payments, monthScope.bills),
+      ),
+    [monthScope, payments],
+  );
+
+  const month = useMemo(
+    () => ({
+      monthLabel: formatMonthLabel(selectedMonth),
+      isCurrentMonth: isSameMonth(selectedMonth, currentMonthKey()),
+      carriedOverCount: monthScope.carriedOverCount,
+      onPrevMonth: () => setSelectedMonth((m) => shiftMonth(m, -1)),
+      onNextMonth: () => setSelectedMonth((m) => shiftMonth(m, 1)),
+      onCurrentMonth: () => setSelectedMonth(currentMonthKey()),
+    }),
+    [selectedMonth, monthScope.carriedOverCount],
   );
 
   const upcomingBills = useMemo(() =>
@@ -226,6 +259,7 @@ export function useBillStore() {
     bills: filteredBills,
     allBills: bills,
     stats,
+    month,
     upcomingBills,
     filterStatus,
     setFilterStatus,

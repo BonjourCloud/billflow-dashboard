@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/currency';
 
 interface HeroWidgetProps {
@@ -11,9 +12,16 @@ interface HeroWidgetProps {
   paidCount: number;
   pendingCount: number;
   overdueCount: number;
+  /** Month switcher; omit to hide it. */
+  monthLabel?: string;
+  isCurrentMonth?: boolean;
+  carriedOverCount?: number;
+  onPrevMonth?: () => void;
+  onNextMonth?: () => void;
+  onCurrentMonth?: () => void;
 }
 
-export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmount, paidPercent, paidCount, pendingCount, overdueCount }: HeroWidgetProps) {
+export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmount, paidPercent, paidCount, pendingCount, overdueCount, monthLabel, isCurrentMonth = true, carriedOverCount = 0, onPrevMonth, onNextMonth, onCurrentMonth }: HeroWidgetProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -22,10 +30,33 @@ export function HeroWidget({ totalAmount, paidAmount, pendingAmount, overdueAmou
       className="col-span-12 md:col-span-8 row-span-2 glass-card rounded-3xl p-8 flex flex-col justify-between"
     >
       <div>
-        <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Monthly Flow</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Monthly Flow</p>
+          {monthLabel && (
+            <div className="flex items-center gap-1" role="group" aria-label="Select month">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrevMonth} aria-label="Previous month">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="min-w-[8.5rem] text-center text-sm font-medium" aria-live="polite">{monthLabel}</span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNextMonth} aria-label="Next month">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              {!isCurrentMonth && (
+                <Button variant="outline" size="sm" className="h-8 ml-1" onClick={onCurrentMonth}>
+                  This month
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
         <div className="mt-3 text-5xl font-bold font-mono-data tracking-tighter">
           {formatCurrency(totalAmount)}
         </div>
+        {carriedOverCount > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Includes {carriedOverCount} unpaid {carriedOverCount === 1 ? 'bill' : 'bills'} from earlier months
+          </p>
+        )}
       </div>
 
       <div className="mt-6 space-y-3">

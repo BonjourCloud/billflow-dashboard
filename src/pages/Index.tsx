@@ -61,7 +61,7 @@ const Index = () => {
       <div className="mx-auto max-w-7xl">
         <DashboardHeader />
         <div className="grid grid-cols-12 gap-4">
-          <HeroWidget {...store.stats} />
+          <HeroWidget {...store.stats} {...store.month} />
           <UpcomingBillsWidget bills={store.upcomingBills} />
           <BillTable
             bills={store.bills}
