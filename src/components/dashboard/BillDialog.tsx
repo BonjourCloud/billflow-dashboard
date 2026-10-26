@@ -5,7 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Repeat, Calendar, Info } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { Repeat, Calendar, Info, CalendarIcon } from 'lucide-react';
+import { format, parse, isValid } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { Bill, BillStatus, BillCategory, CATEGORIES, STATUSES } from '@/data/bills';
 
 interface BillDialogProps {
@@ -185,13 +189,32 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
               <Label htmlFor="dueDate">
                 {recurrenceType === 'recurring' ? 'Initial Due Date' : 'Due Date'}
               </Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="bg-secondary/50 font-mono-data focus:ring-2 focus:ring-primary/50"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="dueDate"
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-mono-data bg-secondary/50 focus:ring-2 focus:ring-primary/50',
+                      !dueDate && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dueDate ? format(parse(dueDate, 'yyyy-MM-dd', new Date()), 'MMM dd, yyyy') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarPicker
+                    mode="single"
+                    selected={dueDate ? parse(dueDate, 'yyyy-MM-dd', new Date()) : undefined}
+                    onSelect={(date) => {
+                      if (date && isValid(date)) setDueDate(format(date, 'yyyy-MM-dd'));
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
               {errors.dueDate && <p className="text-xs text-destructive">{errors.dueDate}</p>}
             </div>
           </div>

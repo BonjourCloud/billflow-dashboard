@@ -21,9 +21,10 @@ services:
       # Render terminates TLS at a single proxy hop.
       - key: TRUST_PROXY
         value: "1"
-      # Deployed frontend origin(s), e.g. https://billflow.vercel.app
+      # Deployed frontend origin(s). Comma-separated, no trailing path.
+      # Must exactly match the Vercel origins (used for CORS + Clerk azp).
       - key: CLIENT_URL
-        sync: false
+        value: https://billwill.site,https://www.billwill.site
       - key: MONGODB_URI
         sync: false
       - key: CLERK_SECRET_KEY

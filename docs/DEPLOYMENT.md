@@ -20,6 +20,22 @@ Authentication uses Clerk, and optional branding-logo uploads use a private AWS 
 4. Deploy the frontend to Vercel with `VITE_API_URL` pointing at the Render service.
 5. Confirm `CLIENT_URL` on Render exactly matches the Vercel origin, then run the post-deploy checklist.
 
+### Domain layout (billwill.site)
+
+This project is configured for the custom domain **billwill.site**:
+
+| Host | Serves | Points at |
+|---|---|---|
+| `billwill.site`, `www.billwill.site` | Frontend (Vercel) | Vercel's A/CNAME records |
+| `api.billwill.site` | Backend API (Render) | `CNAME` → the Render service |
+
+So the production values are:
+
+- Vercel: `VITE_API_URL=https://api.billwill.site`
+- Render: `CLIENT_URL=https://billwill.site,https://www.billwill.site` (already defaulted in `render.yaml`)
+
+Add the domains in each platform's dashboard (Vercel → Project → Domains; Render → Service → Settings → Custom Domains), then create the DNS records they show at your registrar. Both platforms issue TLS certificates automatically once DNS resolves.
+
 ## 1. MongoDB Atlas
 
 1. Create a cluster. Atlas clusters are replica sets, so installment-plan creation runs inside a MongoDB transaction (the API falls back to a non-transactional path with manual cleanup only on standalone servers).
@@ -88,7 +104,7 @@ Counters are kept in each instance's memory. With a single instance this is exac
 
 1. Import the repository in Vercel (project root = repository root).
 2. Set these environment variables for Production (and Preview, if used):
-   - `VITE_API_URL` — the Render service URL, e.g. `https://billflow-api.onrender.com` (no trailing path).
+   - `VITE_API_URL` — the API origin, `https://api.billwill.site` (or the raw Render URL such as `https://billflow-api.onrender.com` before the custom domain resolves). No trailing path.
    - `VITE_CLERK_PUBLISHABLE_KEY` — the Clerk publishable key.
 3. Deploy.
 
