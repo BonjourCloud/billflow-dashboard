@@ -1,3 +1,4 @@
+import { useDemo } from '@/hooks/useDemo';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -9,6 +10,7 @@ import { useSiteSettings } from '@/hooks/useSiteSettings';
 export default function Login() {
   const { session, signInWithGoogle, loading } = useAuth();
   const { settings } = useSiteSettings();
+  const demo = useDemo();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -55,6 +57,17 @@ export default function Login() {
           </svg>
           Continue with Google
         </Button>
+
+        {demo.status.enabled && (
+          <Button
+            onClick={demo.startDemo}
+            disabled={loading || demo.starting}
+            variant="ghost"
+            className="w-full h-11 mt-3 text-sm"
+          >
+            {demo.starting ? 'Opening demo…' : 'Or explore the demo account'}
+          </Button>
+        )}
 
         <p className="text-xs text-muted-foreground mt-8">
           By signing in, you agree to our Terms of Service and Privacy Policy.

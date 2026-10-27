@@ -65,6 +65,7 @@ async function mockApi(page: Page) {
 
     if (url.pathname === "/api/site-settings") return json(siteSettings);
     if (url.pathname === "/api/pricing-tiers") return json(pricingTiers);
+    if (url.pathname === "/api/demo/status") return json({ enabled: false, isDemoUser: false });
 
     // Signed-out pages should not call authenticated endpoints.
     unexpected.push(`${route.request().method()} ${url.pathname}`);

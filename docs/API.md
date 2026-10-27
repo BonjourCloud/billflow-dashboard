@@ -145,6 +145,16 @@ Spent amounts, free-to-spend and the savings rate are not returned by the API: t
 | PATCH | `/api/admin/site-settings` | admin | `{ theme_primary_hsl, theme_accent_hsl, theme_background_hsl, theme_font_pair }` (HSL like `221 83% 53%`) |
 | POST | `/api/admin/branding/logo` | admin | Multipart field `logo`: PNG, JPEG, or WebP (checked by file signature), max 2 MB. Returns `{ url }`; save it with `PATCH /api/admin/branding`. |
 
+## Demo account
+
+Available only when `DEMO_CLERK_USER_ID` is set; otherwise status reports `enabled: false` and the other two return `404`. See [DEMO.md](DEMO.md).
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/demo/status` | public | `{ enabled, isDemoUser }`. When called by the demo user, re-seeds data older than 24 hours first. |
+| POST | `/api/demo/session` | public, 20 per 15 min per IP | Returns `{ ticket }`, a one-time Clerk sign-in ticket for the demo user only, valid 60 seconds. `404` when off, `503` if Clerk cannot issue it. |
+| POST | `/api/demo/reset` | demo user or admin | Deletes and re-seeds only the demo user's data. `403` for others, `429` within 10 seconds of the previous reset. |
+
 ## Admin users
 
 | Method | Path | Auth | Notes |

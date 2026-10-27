@@ -1,9 +1,9 @@
-# Render Blueprint for the BillWill Express API.
+# Render Blueprint for the BillFlow Express API.
 # Variables marked `sync: false` are secrets or deployment-specific values;
 # Render prompts for them when the Blueprint is first applied.
 services:
   - type: web
-    name: billwill-api
+    name: billflow-api
     runtime: node
     # Free instances sleep when idle; switch to a paid plan for production traffic.
     plan: free
@@ -32,6 +32,8 @@ services:
       - key: CLERK_PUBLISHABLE_KEY
         sync: false
       - key: ADMIN_CLERK_USER_IDS
+        sync: false
+      - key: DEMO_CLERK_USER_ID
         sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false

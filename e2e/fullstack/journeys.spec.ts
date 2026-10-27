@@ -225,3 +225,24 @@ test("lets an admin manage users and pricing", async ({ page }) => {
   await expectNoDollarSign(page, "admin pricing");
   expect(errors).toEqual([]);
 });
+
+test("opens the demo account with one click and shows sample data", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the demo" }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByText("Demo account.")).toBeVisible();
+  await expect(page.getByText("Monthly Flow")).toBeVisible();
+  await expect(page.getByText("Free to spend")).toBeVisible();
+  await expectNoHorizontalOverflow(page, "demo dashboard");
+
+  await page.getByRole("button", { name: "Budget" }).click();
+  await expect(page).toHaveURL(/\/budget\/income$/);
+  await expect(page.getByText("Salary", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Diwali bonus").first()).toBeVisible();
+  await page.getByRole("link", { name: "Budgets" }).click();
+  await expect(page.getByText("By category")).toBeVisible();
+  await expectNoDollarSign(page, "demo budgets");
+  expect(errors).toEqual([]);
+});

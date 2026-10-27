@@ -48,6 +48,8 @@ const serverEnvSchema = z
         message: "CLERK_PUBLISHABLE_KEY must start with pk_test_ or pk_live_.",
       }),
     ADMIN_CLERK_USER_IDS: optionalString,
+    // Clerk user that is the shared demo account (optional; enables demo mode).
+    DEMO_CLERK_USER_ID: optionalString,
     AWS_ACCESS_KEY_ID: optionalString,
     AWS_SECRET_ACCESS_KEY: optionalString,
     AWS_REGION: optionalString.pipe(
@@ -98,6 +100,28 @@ const serverEnvSchema = z
         message:
           "ADMIN_CLERK_USER_IDS must be a comma-separated list of Clerk user IDs (user_...).",
       });
+    }
+
+    if (env.DEMO_CLERK_USER_ID) {
+      if (!/^user_[A-Za-z0-9]+$/.test(env.DEMO_CLERK_USER_ID)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["DEMO_CLERK_USER_ID"],
+          message: "DEMO_CLERK_USER_ID must be a Clerk user ID (user_...).",
+        });
+      } else if (
+        (env.ADMIN_CLERK_USER_IDS ?? "")
+          .split(",")
+          .map((id) => id.trim())
+          .includes(env.DEMO_CLERK_USER_ID)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["DEMO_CLERK_USER_ID"],
+          message:
+            "DEMO_CLERK_USER_ID must not also be listed in ADMIN_CLERK_USER_IDS.",
+        });
+      }
     }
 
     const hasAccessKey = Boolean(env.AWS_ACCESS_KEY_ID);

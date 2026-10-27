@@ -32,6 +32,11 @@ function toClerkUser(user: FakeClerkUser) {
 }
 
 export const fakeClerkClient = {
+  signInTokens: {
+    async createSignInToken({ userId }: { userId: string; expiresInSeconds: number }) {
+      return { token: `ticket_${userId}` };
+    },
+  },
   users: {
     async getUser(id: string) {
       const user = users.get(id);

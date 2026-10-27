@@ -37,6 +37,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Demo account only: when its sample data was last (re)created.
+    demoSeededAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -47,4 +52,4 @@ const userSchema = new mongoose.Schema(
 export type UserDocument = InferSchemaType<typeof userSchema>;
 
 export const User =
-    mongoose.models.User || mongoose.model("User", userSchema);
+    mongoose.models.User || mongoose.model("User", userSchema);

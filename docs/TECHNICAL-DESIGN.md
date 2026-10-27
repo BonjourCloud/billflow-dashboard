@@ -34,7 +34,8 @@ Diagrams use [Mermaid](https://mermaid.js.org/) and render on GitHub and in most
 17. [Architecture decisions](#17-architecture-decisions)
 18. [Risks, limitations and roadmap](#18-risks-limitations-and-roadmap)
 19. [Glossary](#19-glossary)
-20. [Appendix A. Endpoint security matrix](#appendix-a-endpoint-security-matrix)
+20. [Build, deploy and test guide](#20-build-deploy-and-test-guide)
+21. [Appendix A. Endpoint security matrix](#appendix-a-endpoint-security-matrix)
 
 ---
 
@@ -45,7 +46,8 @@ BillWill helps an individual (initially an Indian household) see what they owe, 
 - one-off and recurring bills, subscriptions and EMI/installment plans, with payments, notes and in-app reminders;
 - a monthly dashboard (Monthly Flow, Upcoming, spending chart, rule-based insights);
 - **budgeting**: income sources, a cash-flow view ("free to spend"), per-category limits, an optional needs/wants/savings split, and an EMI-share warning;
-- an admin console: users and roles, pricing tiers, branding and theme, and bill categories.
+- an admin console: users and roles, pricing tiers, branding and theme, and bill categories;
+- a **demo account**: a shared, resettable account with realistic sample data and a one-click "Try the demo" entry, for presenting the app without personal data (see [DEMO.md](DEMO.md)).
 
 **In scope of this document:** the software architecture, data model, algorithms, runtime behaviour, security, deployment and operations of the application in this repository.
 
@@ -73,6 +75,7 @@ Engineers who maintain or extend the system, reviewers of the design, and operat
 | F8 | Income and cash flow | Monthly and one-time income, received tracking, free-to-spend |
 | F9 | Budgets | Category limits, optional needs/wants/savings split, EMI-share warning |
 | F10 | Admin | Role management, pricing tiers, branding, theme, categories |
+| F11 | Demo account | One-click sign-in to a sample-data account; daily and on-demand reset; never an admin |
 
 ### 2.2 Quality attributes
 
@@ -282,6 +285,7 @@ A mental model first. BillWill is like a small restaurant:
 *How BillWill uses it.* The frontend (`src/contexts/AuthContext.tsx`, `src/lib/api.ts`) attaches the token to every API call as `Authorization: Bearer <token>`. On the server, `clerkMiddleware` checks the signature and expiry and that the token was issued to one of our own origins (`authorizedParties` = `CLIENT_URL`), then `getAuth(req)` gives the handler the user id. The API never sees a password. A user's email, name and avatar are copied into the `users` collection at most every 15 minutes. **Admin** status comes from either the `ADMIN_CLERK_USER_IDS` environment variable (always on, checked every request) or `role: "admin"` in MongoDB (set from Admin → Users).
 
 *Worth knowing.*
+- The demo account uses Clerk's **sign-in ticket** feature: the API asks Clerk's Backend API for a one-time ticket for one specific user, and the browser exchanges it for a session. The visitor never types a password (§9.9).
 - The **publishable key** (`pk_…`) is public and ships in the frontend; the **secret key** (`sk_…`) is server-only. Frontend and backend must use the *same* Clerk instance or every call returns 401.
 - Because the token travels in a header (not a cookie), browsers do not attach it automatically to requests from other sites, which is why CSRF attacks do not apply here (§12).
 - Roles are never cached: revoke someone and they lose access on their next request.
@@ -423,6 +427,7 @@ This map answers "where in the code is this feature, and what would fail if it b
 | Survive new deployments | `chunkReload.ts`, `ChunkErrorBoundary` | one reload, no loop | `chunk-reload.test.ts` |
 | Rupee display | `src/lib/currency.ts` | Indian digit grouping, compact `₹1.2Cr` | `currency.test.ts`, `currency-ui.test.tsx` |
 | Insights | `src/lib/insights.ts` | fixed rules, no AI | `insights.test.ts` |
+| Show the app without personal data | `demoService.ts`, `useDemo.ts`, `DemoBanner.tsx`, `/api/demo/*` | one-click sign-in, daily reset, never admin, only the demo user's data touched | `demo-data.test.ts`, `integration/demo.test.ts`, demo journey in `e2e/fullstack/journeys.spec.ts` |
 
 ---
 
@@ -626,6 +631,7 @@ erDiagram
         string displayName
         string role "user | admin"
         date profileSyncedAt
+        date demoSeededAt "demo user only"
     }
     BILL {
         objectId _id PK
@@ -706,7 +712,7 @@ Global (not per-user) collections: `Category`, `PricingTier`, `SiteSettings` (si
 
 | Collection | Key constraints and indexes | Notes |
 |---|---|---|
-| `users` | unique `clerkUserId` | `role` only changed by grant/revoke; profile copied from Clerk at most every 15 min |
+| `users` | unique `clerkUserId` | `role` only changed by grant/revoke; profile copied from Clerk at most every 15 min; `demoSeededAt` is set only for the demo user |
 | `bills` | `userId`; `seriesId`; unique partial indexes for **one occurrence per series per billing cycle** and **one bill per plan installment number** | `dueDate` stored at UTC midnight; `category` is a slug matching `^[a-z0-9]+(-[a-z0-9]+)*$` |
 | `recurringseries` | `{userId, isActive}` | Monthly only; `recurringDay` 1–31 with month-end clamping |
 | `payments` | `{userId, billId, paymentDate desc, createdAt desc}`; unique per-user `idempotencyKey` (partial) | Partial payments allowed |
@@ -842,6 +848,17 @@ An **EMI bill** is one with a `planId` or in the `loans` category. The EMI pill 
 
 Each category has a `kind` (`need`, `want`, `savings`) set by admins. Defaults: entertainment and software → want; savings → savings; everything else → need. Documents created before `kind` existed fall back to this mapping when read (`defaultKindForSlug`), so no migration is required.
 
+### 9.9 Demo account (`server/src/services/demoService.ts`)
+
+The demo account is one ordinary Clerk user, identified by the environment variable `DEMO_CLERK_USER_ID`. Demo mode exists only when that variable is set.
+
+- **Dataset.** `buildDemoDataset(userId, now)` is a pure function that returns every document to insert, with pre-assigned ids so bills can reference their series and plans. All dates are relative to `now` (for example "an overdue bill dated three days ago", "a bill due in two days", "recurring bills from five months ago to next month"), so the demo always looks current. The content is fixed and covers every feature (see [DEMO.md](DEMO.md)).
+- **Invariants** (asserted by tests on five dates including month ends and a leap day): counted income is ₹1,00,000; bills plus savings are at least half of income and free-to-spend stays positive; budgets show ok, warn and over; installment schedules sum to the plan total; recurring occurrences are unique per series and month; every paid bill has a payment; every document passes its real Mongoose validation.
+- **Reset.** `resetDemoData` deletes only the demo user's documents (bills, payments, notes, notifications, series, plans, income, budgets, settings), ensures a Savings-type category exists, inserts the dataset, and records `demoSeededAt`. Concurrent resets share one run. It uses ordinary inserts with the same unique indexes as production data, so it cannot create duplicates.
+- **Freshness.** `ensureFreshDemo` re-seeds when the data is missing or older than 24 hours. It runs when a visitor starts a demo session and whenever the signed-in demo user loads `GET /api/demo/status`, so no scheduler is needed (consistent with decision 3).
+- **Cooldown.** A manual reset within 10 seconds of the last seed returns `429`.
+- **Isolation from privilege.** `isUserAdmin` returns false for the demo user before looking at the environment or database; `grant-admin` refuses the demo id; boot validation rejects an id listed in both `DEMO_CLERK_USER_ID` and `ADMIN_CLERK_USER_IDS`.
+
 ---
 
 ## 10. Key runtime flows
@@ -963,6 +980,31 @@ sequenceDiagram
     end
 ```
 
+### 10.6 One-click demo sign-in
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor V as Visitor
+    participant B as Browser
+    participant A as API
+    participant D as MongoDB
+    participant C as Clerk
+    V->>B: click Try the demo
+    B->>A: POST /api/demo/session (no token)
+    A->>A: rate limit 20 per 15 min per IP, demo enabled?
+    A->>D: demo data missing or older than 24 h? re-seed if so
+    A->>C: createSignInToken for the demo user, 60 s
+    C-->>A: one-time ticket
+    A-->>B: ticket
+    B->>C: signIn.create with strategy ticket
+    C-->>B: session
+    B->>B: setActive, open /dashboard
+    B->>A: GET /api/demo/status with Bearer token
+    A-->>B: enabled true, isDemoUser true
+    B->>V: dashboard with demo banner
+```
+
 ---
 
 ## 11. API design
@@ -974,7 +1016,7 @@ The full endpoint list with request and response shapes is in [API.md](API.md). 
 - **Strict schemas**: unknown fields are `400`.
 - **Uniform errors**: `{ error }` with these statuses — 400 validation, 401 unauthenticated, 403 not admin, 404 not found or not yours, 409 conflict, 413 too large, 429 rate limited, 500 generic, 503 not ready.
 - **Idempotency**: payments and installment plans accept an `idempotencyKey`.
-- **Public surface** is limited to `/api/health`, `/api/ready`, `/api/site-settings`, `/api/pricing-tiers`.
+- **Public surface** is limited to `/api/health`, `/api/ready`, `/api/site-settings`, `/api/pricing-tiers`, `GET /api/demo/status` and `POST /api/demo/session` (the last answers 404 unless demo mode is on).
 
 | Resource group | Paths |
 |---|---|
@@ -985,6 +1027,7 @@ The full endpoint list with request and response shapes is in [API.md](API.md). 
 | Notifications | `/api/notifications[...]` |
 | Categories | `/api/categories`, `/api/admin/categories[...]` |
 | Budgeting | `/api/income[...]`, `/api/budgets[...]`, `/api/budget-settings` |
+| Demo | `GET /api/demo/status`, `POST /api/demo/session`, `POST /api/demo/reset` |
 | Site | `/api/site-settings`, `/api/pricing-tiers`, `/api/admin/*` |
 
 ---
@@ -1043,6 +1086,8 @@ flowchart LR
 | Malicious file upload | Signature check, size cap, no direct public bucket |
 | Brute force / scraping | Rate limits; Clerk handles credential attacks |
 | Data loss from category changes | Deletion blocked while in use; hide instead |
+| Abuse of the public demo sign-in endpoint | Rate limit 20 per 15 min per IP; the ticket is for the demo user only and expires in 60 s; demo user has no admin rights; the shared account holds no personal data |
+| Offensive or personal content left in the shared demo account | Banner warns visitors; automatic daily reset; manual reset by anyone in the demo or by an admin |
 
 ### 12.4 Privacy
 
@@ -1089,6 +1134,7 @@ This review read the route list and handlers in `server/src/index.ts`, the reque
 | S13 | **Payments accept client-chosen `status` and overpayment** | Low (integrity) | Own data only; no cross-user effect | Decide the rule (for example reject overpayment) and enforce it server-side |
 | S14 | **Public health endpoint reveals service name and database state** | Informational | `GET /api/health` | Acceptable for platform probes; remove the `database` field from the public response if you prefer |
 | S15 | **Secrets rotation and incident process undocumented** | Low–Medium | No procedure in the docs | Document rotation of Clerk, MongoDB and AWS credentials and a basic incident checklist |
+| S17 | **The demo account is a shared, public write surface** | Low | Anyone can sign in and edit it; visible to the next visitor until reset; the ticket endpoint is public | Mitigated: rate limit, 60 s ticket, no admin rights, banner, daily and manual reset. Optionally block free-text fields (notes) in demo mode or add a CAPTCHA |
 | S16 | **No backups configured by the application** | Medium (availability) | See §14.3 | Enable Atlas backups; test a restore |
 
 **Suggested order of work.** (1) S8 and S10–S11, which are settings and CI changes costing almost no code; (2) S6 and S5, small code changes; (3) S1, S2 and S3, which add features; (4) S9 and S16 as operations work.
@@ -1142,7 +1188,7 @@ flowchart TB
 | Backend | Render Blueprint `render.yaml`: root `server`, `npm ci --include=dev && npm run build`, `npm start`, health check `/api/ready`, `TRUST_PROXY=1`, `NODE_VERSION=24` |
 | Database | Atlas replica set (needed for transactions); network access limited to Render outbound IPs where possible |
 | Alternative | Docker/nginx for the frontend and a Node container for the API on a VPS with Coolify ([COOLIFY.md](COOLIFY.md)) |
-| Config | Environment variables listed in [DEPLOYMENT.md](DEPLOYMENT.md#environment-variables); no secrets in the repository |
+| Config | Environment variables listed in [DEPLOYMENT.md](DEPLOYMENT.md#environment-variables), including the optional `DEMO_CLERK_USER_ID`; no secrets in the repository |
 
 ### 13.1 Release procedure
 
@@ -1217,11 +1263,11 @@ flowchart BT
 | Level | Proves | Does not prove |
 |---|---|---|
 | Unit | Calculations (recurrence, installments, month scope, cash flow, budget rows), schemas, env validation, error handler | Database behaviour |
-| Integration | Real routes and real MongoDB semantics: auth boundaries on **every** route (route list read from the app), per-user isolation, validation sweeps over every `:id` route, transactions, idempotency, categories, income/budgets | Real Clerk, Atlas, S3 |
-| Browser journeys | Sign-in flow (stand-in), add bill, pay, subscription, installment, reminders, admin access, no horizontal scroll | Real Clerk, deployed config |
+| Integration | Real routes and real MongoDB semantics: auth boundaries on **every** route (route list read from the app), per-user isolation, validation sweeps over every `:id` route, transactions, idempotency, categories, income/budgets, demo account | Real Clerk, Atlas, S3 |
+| Browser journeys | Sign-in flow (stand-in), add bill, pay, subscription, installment, reminders, admin access, one-click demo, no horizontal scroll | Real Clerk, deployed config |
 | Smoke | Landing page, redirects, metadata with real Clerk | Signed-in flows |
 
-New routes are covered automatically by the boundary and validation sweeps, so adding an endpoint without an auth check or ID validation fails the suite. Details and commands: [TESTING.md](TESTING.md). Mocked versus real integrations: [MOCKED-VS-REAL.md](MOCKED-VS-REAL.md).
+New routes are covered automatically by the boundary and validation sweeps, so adding an endpoint without an auth check or ID validation fails the suite. Details and commands: [TESTING.md](TESTING.md). Mocked versus real integrations: [MOCKED-VS-REAL.md](MOCKED-VS-REAL.md). For when to run each command and how they differ, see [section 20](#20-build-deploy-and-test-guide).
 
 ---
 
@@ -1242,6 +1288,7 @@ New routes are covered automatically by the boundary and validation sweeps, so a
 | 11 | Real-database integration tests as the main safety net | Mocks only | Catches index, transaction and query bugs; needs a MongoDB binary download on first run. |
 | 12 | Auto-reload on stale chunk errors | Versioned service worker | Solves the observed blank-page failure with ~50 lines; relies on a single guarded reload. |
 | 13 | Rate limits in memory | Redis | Adequate for one instance; revisit when scaling out. |
+| 14 | Demo as a real Clerk user with a server-issued sign-in ticket and a deterministic, date-relative dataset | A separate "demo mode" in the frontend with fake data; a shared password | Exercises the real app end to end, nothing to share or leak, always current. Needs one Clerk user and one environment variable; the account is shared and public, so it holds only sample data and resets daily. |
 
 ---
 
@@ -1296,7 +1343,148 @@ New routes are covered automatically by the boundary and validation sweeps, so a
 | Kind | A category's budget type: need, want or savings |
 | Slug | Immutable URL-safe identifier of a category |
 | Bootstrap admin | A Clerk user id listed in `ADMIN_CLERK_USER_IDS`, always an admin |
+| Demo account | The Clerk user in `DEMO_CLERK_USER_ID`: a shared account holding resettable sample data, never an admin |
+| Sign-in ticket | A one-time, short-lived Clerk token that signs a browser in as one named user without a password |
 | Authorized party (`azp`) | The origin a Clerk token was issued to; must match `CLIENT_URL` |
+
+---
+
+## 20. Build, deploy and test guide
+
+This section answers a practical question: *"I changed something. Which commands do I run, in what order, and why are there so many of them?"* Each command answers a different question about the code, and the cheap ones run first so that you find mistakes in seconds instead of minutes. Everything below runs on **Node 24** (the version the project targets and CI uses). Run the commands from the repository root unless noted.
+
+### 20.1 The pipeline at a glance
+
+```mermaid
+flowchart LR
+    edit([Edit code]) --> lint[1. npm run lint<br/>style and bug patterns<br/>seconds]
+    lint --> tc[2. npm run typecheck<br/>type errors<br/>seconds]
+    tc --> unit[3. npm test<br/>unit tests, no database<br/>seconds]
+    unit --> integ[4. npm run test:integration<br/>real API + real MongoDB<br/>about a minute]
+    integ --> build[5. npm run build<br/>production bundle compiles<br/>under a minute]
+    build --> e2e[6. npm run test:e2e:fullstack<br/>real browser, whole app<br/>a few minutes]
+    e2e --> push([git push personal main])
+    push --> ci[GitHub Actions<br/>repeats 1 to 6 on a clean machine]
+    push --> deploy[Vercel and Render<br/>build and deploy]
+```
+
+The order is deliberate. Each step is slower and more expensive than the one before it, and each catches a different class of mistake. A failure at step 1 means there is no point waiting for step 6.
+
+### 20.2 What each command does, and when to run it
+
+#### `npm run lint` — static analysis of the source
+
+- **What it does:** runs ESLint over the whole repository. ESLint *reads* your code without running it and flags patterns that are usually bugs or breach project rules: unused variables, React hook rules (for example calling a hook conditionally, which causes hard-to-trace rendering bugs), missing dependencies in `useEffect`, and similar.
+- **What it cannot tell you:** whether the code works. It only tells you that the code looks suspicious.
+- **When to run it:** before every commit. Your editor (Kiro) usually shows the same warnings as you type, so it is often clean already. It takes seconds, so there is no reason to skip it.
+- **If it fails:** fix the reported lines; most are one-line changes. Do not silence a rule with a comment unless you can explain why in the same comment.
+
+#### `npm run typecheck` — the TypeScript compiler as a checker
+
+- **What it does:** runs `tsc` (without producing output) over four configurations: the app, the Vite/tooling files, the tests, and the Playwright files. It confirms that every function call passes the right kind of data and every property you use exists. The backend has its own check: `npm run typecheck` inside `server/`.
+- **When to run it:** before every commit, right after lint. It is the command that catches "I renamed a field in one file and forgot another".
+- **Why it is separate from the build:** the frontend build (Vite) strips types without checking them, so a build can succeed even with type errors. Typecheck is the only step that proves the types agree.
+
+#### `npm test` — unit tests (fast, no database)
+
+- **What it does:** runs Vitest with `vitest.config.ts`, in a simulated browser (`jsdom`), over every `*.test.ts(x)` file under `src/` **except** `src/test/integration/`. A *unit test* checks one small piece of logic in isolation: a calculation, a validation schema, a helper, a React hook. Anything that would normally touch the database is mocked (replaced by a fake) or simulated in memory.
+- **What it is good at:** pinning down rules that are easy to get subtly wrong, such as month-end clamping for recurring bills, installment splitting, cash-flow arithmetic, budget status, environment-variable validation, and the demo dataset invariants (at least 50% of income goes to bills and savings).
+- **What it cannot tell you:** whether a real HTTP request reaches the right route with the right permissions, or whether MongoDB behaves the way the mocks assume.
+- **When to run it:** after every meaningful change, and continuously while you work with `npm run test:watch` (re-runs the affected tests whenever you save). Takes seconds.
+- **Note:** `npm test` inside `server/` simply calls the root command, so there is one unit suite for the whole repository.
+
+#### `npm run test:integration` — real API plus a real (temporary) database
+
+- **What it does:** runs Vitest with a *different* configuration, `vitest.integration.config.ts`, over `src/test/integration/`. Each test file starts an in-memory **MongoDB replica set** (via `mongodb-memory-server`) and sends real HTTP requests to the real Express application. Only Clerk is replaced: a header stands in for the signed-in user.
+- **Why a replica set:** the app uses MongoDB transactions (for example, recording a payment and updating a bill together), and transactions only work on a replica set.
+- **How it differs from `npm test`:** unit tests ask "is this function correct?"; integration tests ask "does this *route* behave correctly with a real database?". They verify what mocks cannot: authentication on **every** route, one user never seeing another user's data, `400` responses for malformed IDs, duplicate protection under concurrent requests, transactions, and the demo-account endpoints.
+- **Why it is a separate command:** it needs a MongoDB binary, is slower, and starts a database per file. Keeping it apart lets `npm test` stay instant.
+- **First run:** downloads a MongoDB binary of roughly 100 MB into `node_modules/.cache/mongodb-memory-server/`; later runs reuse it. It needs internet access once.
+- **When to run it:** whenever you change anything under `server/` (routes, models, services, middleware), or any shared logic those routes use; and before every push. If you added an endpoint, this suite will fail until the new route has an auth check and ID validation, which is the point.
+
+#### `npm run build` — does the production bundle compile?
+
+- **What it does:** runs `vite build`, which compiles, bundles and minifies the frontend into the `dist/` folder: exactly what Vercel serves. The backend equivalent is `npm run build` inside `server/`, which compiles TypeScript to `server/dist/` (Render runs `node dist/index.js`).
+- **Why it matters even if tests pass:** the production build is stricter and different from the development server. It can fail on a bad import path, a missing file in a chunk, or a missing environment variable. The frontend build requires **`VITE_API_URL`** and **`VITE_CLERK_PUBLISHABLE_KEY`**; Vite copies `VITE_` variables *into the bundle at build time*, which is why changing them in Vercel requires a **redeploy**, not just a restart.
+- **When to run it:** before pushing, and especially after you add or upgrade a dependency, change configuration, or move files. You do not need to run it before `test:e2e` or `test:e2e:fullstack`, because those commands build the app themselves. In CI a placeholder API URL and key are used, since the goal is only "does it compile".
+- **Related:** `npm run build:dev` builds in development mode (unminified, easier to debug); `npm run preview` serves the existing `dist/` locally so you can click around the production bundle.
+
+#### `npm run test:e2e` — signed-out smoke test with the real Clerk
+
+- **What it does:** Playwright launches a real Chromium browser against a built copy of the frontend. The API is **mocked inside the browser** (`page.route`), but Clerk is the **real** hosted service, loaded with your publishable key.
+- **What it proves:** the landing page renders branding and rupee prices, signed-out visitors are redirected from `/dashboard` and `/admin` to the login page, page titles and favicons are right, unknown URLs show the 404 page.
+- **What it cannot prove:** anything that needs a signed-in user.
+- **When to run it:** when you change the landing page, routing, or sign-in redirects, or after a Clerk configuration change. It needs `VITE_CLERK_PUBLISHABLE_KEY` set (otherwise CI skips it with a notice), and a one-time `npx playwright install chromium`.
+
+#### `npm run test:e2e:fullstack` — whole-app journeys in a real browser
+
+- **What it does:** starts the **real Express API on an in-memory MongoDB**, builds the **production frontend** with a test-only stand-in for the Clerk sign-in widget, then drives Chromium through the major user journeys at **three screen sizes** (desktop, tablet, phone): sign in and out, add a bill and pay it, add and cancel a subscription, create an installment plan, receive a reminder, admin access control, and the one-click demo. It also checks that nothing scrolls horizontally and no `$` appears anywhere (money is in rupees).
+- **How it differs from integration tests:** integration tests call the API directly, with no browser. Full-stack journeys prove the **browser and the API work together**: that the buttons exist, the forms submit, and the screens show what the API returned.
+- **How it differs from `test:e2e`:** that one has a real Clerk but a fake API and no signed-in flows; this one has a real API and real signed-in flows but a fake Clerk. Neither covers real Clerk *and* real API together; that gap is covered by the manual post-deploy checklist in [DEPLOYMENT.md](DEPLOYMENT.md).
+- **When to run it:** before pushing a change that affects screens, forms, navigation, or API responses the screens depend on; and before any release or demo. It is the slowest command (it builds the app and runs every journey at three sizes), so use it last, not while iterating. A failed run leaves an HTML report in `playwright-report/`; open it to see screenshots and traces.
+
+### 20.3 Comparison
+
+| Command | Needs a database? | Needs a browser? | Clerk | API | Runtime | Answers the question |
+|---|---|---|---|---|---|---|
+| `npm run lint` | No | No | n/a | n/a | seconds | Does the code follow the rules and avoid known bug patterns? |
+| `npm run typecheck` | No | No | n/a | n/a | seconds | Do the types agree everywhere? |
+| `npm test` | No (mocked) | No (jsdom) | fake | mocked | seconds | Is each piece of logic correct on its own? |
+| `npm run test:integration` | Yes (in-memory) | No | fake header | **real** | about a minute | Does each route behave correctly with a real database and real permissions? |
+| `npm run build` | No | No | n/a | n/a | under a minute | Does the production bundle compile? |
+| `npm run test:e2e` | No | Yes | **real** | mocked | a minute | Do signed-out visitors see the right things with real Clerk? |
+| `npm run test:e2e:fullstack` | Yes (in-memory) | Yes | fake stand-in | **real** | a few minutes | Do real user journeys work end to end at three screen sizes? |
+| Manual checklist ([DEPLOYMENT.md](DEPLOYMENT.md)) | Atlas | Yes | **real** | **real** | 10 minutes | Does the deployed system work with all real services? |
+
+### 20.4 What to run for which kind of change
+
+| You changed… | Minimum to run | Before pushing, also run |
+|---|---|---|
+| Wording, styling, a React component | lint, typecheck, `npm test` | build |
+| A calculation or helper in `src/lib` or `server/src/services` | `npm test` (add or update a test) | integration |
+| A route, model or middleware in `server/` | lint, typecheck, `npm run test:integration` | server typecheck and build (`cd server`), fullstack e2e |
+| A dependency or a config file | build, `npm test`, integration | fullstack e2e |
+| Landing page, routing or login redirects | `npm run test:e2e` | fullstack e2e |
+| An environment variable | `npm test` (the env validation tests) | the manual post-deploy checklist after deploying |
+| Anything before a demo or release | **everything**, in the order of 20.1 | the manual checklist on the deployed site |
+
+A simple rule: **run the fast commands constantly, and the full list once before every push.** If you do nothing else, `lint`, `typecheck`, `npm test` and `npm run test:integration` catch the large majority of mistakes.
+
+### 20.5 What happens in CI
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main` and `feature/**`, on a clean Ubuntu machine with Node 24. It is a safety net: it repeats your local checks somewhere your machine's leftovers cannot hide a problem ("works on my machine").
+
+| CI job | Runs | Secret needed |
+|---|---|---|
+| Frontend lint, typecheck, tests, build | `lint`, `typecheck`, `npm test`, `test:integration`, `build` (with placeholder URL and key) | None |
+| Browser smoke tests | `npm run test:e2e` | `VITE_CLERK_PUBLISHABLE_KEY`; skipped with a notice if absent |
+| Full-stack browser journeys | `npm run test:e2e:fullstack` | None |
+| Server typecheck and build | `npm run typecheck`, `npm run build` in `server/` | None |
+
+Failed browser jobs upload the Playwright report as a downloadable artifact for seven days. Jobs for the same branch cancel older runs, so only the latest push is checked.
+
+### 20.6 Deploying
+
+1. **Push to the `personal` remote** (`git push personal main`). That repository, `raj3176/billwill`, is the deploy source.
+2. **Render** rebuilds the API (`server` build, then `node dist/index.js`) and **Vercel** rebuilds the frontend (`vite build` to `dist`). Both start automatically from the push.
+3. **Deployment is not gated by CI.** Nothing in the repository makes Vercel or Render wait for the CI result, so a broken commit can reach production while CI is still running. This is why the full list in 20.1 runs *before* the push. Gating deploys on CI (branch protection plus Render's "deploy after checks pass" option) is a possible later hardening.
+4. **Order matters when both sides change.** Deploy the API first, then the frontend, so the new screens never call endpoints that do not exist yet. New environment variables (for example `DEMO_CLERK_USER_ID`) are set on the host first, followed by a redeploy.
+5. **Verify on the live site** with the post-deploy checklist in [DEPLOYMENT.md](DEPLOYMENT.md#post-deploy-checklist-manual). Render's free plan sleeps when idle, so the first request after a pause can take about 30 seconds.
+6. **Rolling back:** Vercel and Render both keep previous deployments; redeploy the last good one from their dashboards, or `git revert` the commit and push.
+
+### 20.7 Common problems
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Five currency tests fail (`₹1.0Cr` versus `₹1Cr`) | Running Node 22 or older; formatting differs between Node versions | Use Node 24 |
+| Integration tests hang or fail at start | The MongoDB binary could not be downloaded (no internet or proxy) | Retry with internet access; the binary is cached afterwards |
+| `vite build` fails about missing variables | `VITE_API_URL` or `VITE_CLERK_PUBLISHABLE_KEY` not set | Set them in the shell or `.env` file |
+| Browser tests say Chromium is missing | Playwright browsers not installed | `npx playwright install chromium` (once per machine) |
+| `test:e2e` fails waiting for a redirect | Clerk script slow or the key is invalid | Check the publishable key; Clerk can take 3 to 5 seconds to load |
+| Tests pass locally but fail in CI | Stale `node_modules`, Node version, or an env variable only set locally | Reproduce with `npm ci` and Node 24 |
+| Changed a `VITE_` variable on Vercel, nothing changed | The value is baked in at build time | Redeploy the frontend |
+
+For the full list of what each suite covers, see [TESTING.md](TESTING.md); for which integrations are real versus substituted, see [MOCKED-VS-REAL.md](MOCKED-VS-REAL.md).
 
 ---
 
@@ -1311,6 +1499,9 @@ Legend. **Auth**: `public` no token; `user` signed-in user; `admin` admin only. 
 | GET `/api/pricing-tiers` | public | `includeHidden` = `"true"` only honoured for admins | Hidden tiers never returned to the public |
 | GET `/api/users/me`, `/api/users/me/role` | user | none | Profile refresh from Clerk at most every 15 min; role computed each call |
 | GET `/api/categories` | user | none | Global list |
+| GET `/api/demo/status` | public | none | Reports `enabled` and, with a token, `isDemoUser`; refreshes stale demo data for the demo user |
+| POST `/api/demo/session` | public, *IP limit 20 per 15 min* | none | 404 unless `DEMO_CLERK_USER_ID` is set; returns a 60-second Clerk ticket for the demo user only |
+| POST `/api/demo/reset` | user, *strict* | none | Demo user or admin only; 404 when demo is off; 429 within 10 s of a seed |
 | POST/PATCH/DELETE `/api/admin/categories[/:id]` | admin | zod strict; id shape | Unique name; in-use and last-active rules |
 | GET `/api/admin/users` | admin | `limit` / `offset` (see S5) | Lists users from Clerk |
 | POST `/api/admin/users/:id/grant-admin`, `/revoke-admin` | admin, *strict* | id; target must exist; no self-revoke | Bootstrap admins cannot be revoked |

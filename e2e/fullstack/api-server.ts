@@ -11,6 +11,7 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 const PORT = Number(process.env.E2E_API_PORT ?? 5175);
 const FRONTEND_ORIGIN = process.env.E2E_FRONTEND_ORIGIN ?? "http://127.0.0.1:4175";
 export const E2E_ADMIN_ID = "user_e2e_admin";
+export const E2E_DEMO_ID = "user_e2edemo";
 
 // NODE_ENV=test skips production env validation and the real clerkMiddleware
 // (which is only registered when both Clerk keys are set). The placeholder
@@ -19,6 +20,7 @@ process.env.NODE_ENV = "test";
 process.env.CLERK_SECRET_KEY = "sk_test_e2e_stub";
 delete process.env.CLERK_PUBLISHABLE_KEY;
 process.env.ADMIN_CLERK_USER_IDS = E2E_ADMIN_ID;
+process.env.DEMO_CLERK_USER_ID = E2E_DEMO_ID;
 
 const replSet = await MongoMemoryReplSet.create({
   replSet: { count: 1, storageEngine: "wiredTiger" },
@@ -54,6 +56,11 @@ users.getUser = async (id: string) => fakeClerkUser(id);
 users.getUserList = async ({ limit = 100, offset = 0 }: { limit?: number; offset?: number } = {}) => {
   const all = [...knownUsers].map(fakeClerkUser);
   return { data: all.slice(offset, offset + limit), totalCount: all.length };
+};
+
+// Demo sign-in ticket: the fake frontend SDK turns `e2e:<userId>` into a session.
+(clerkClient as unknown as { signInTokens: unknown }).signInTokens = {
+  createSignInToken: async ({ userId }: { userId: string }) => ({ token: `e2e:${userId}` }),
 };
 
 const clerkAuthBrand = Symbol.for("@clerk/express.auth");

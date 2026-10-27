@@ -119,6 +119,14 @@ import {
   budgetSettingsUpdateSchema,
 } from "./models/Budget.js";
 import {
+  DEMO_RESET_COOLDOWN_MS,
+  demoWasJustReset,
+  ensureFreshDemo,
+  getDemoUserId,
+  isDemoUser,
+  resetDemoData,
+} from "./services/demoService.js";
+import {
   categoryLabelTaken,
   countOtherActiveCategories,
   createCategory,
@@ -321,6 +329,10 @@ async function isUserAdmin(
   userId: string | null | undefined,
 ): Promise<boolean> {
   if (!userId) return false;
+
+  // The shared demo account is never an admin, whatever the environment or
+  // database says.
+  if (isDemoUser(userId)) return false;
 
   const adminIds = getBootstrapAdminIds();
 
@@ -539,6 +551,12 @@ app.post("/api/admin/users/:id/grant-admin", sensitiveRateLimiter, async (req, r
       !targetUserId.trim()
     ) {
       return res.status(400).json({ error: "Target user ID is required." });
+    }
+
+    if (isDemoUser(targetUserId)) {
+      return res
+        .status(400)
+        .json({ error: "The demo account cannot be made an admin." });
     }
 
     let clerkUser;
@@ -997,6 +1015,110 @@ app.put("/api/budget-settings", async (req, res) => {
   } catch (error) {
     console.error("Failed to save budget settings:", error);
     return res.status(500).json({ error: "Failed to save budget settings." });
+  }
+});
+
+// ---- Demo account ----------------------------------------------------------
+// A shared, resettable account for showing the app without personal data.
+// Enabled only when DEMO_CLERK_USER_ID is set.
+
+const demoSessionRateLimiter = createRateLimiter({
+  windowMs: FIFTEEN_MINUTES_MS,
+  limit: 20,
+});
+
+// GET /api/demo/status — public. Tells the landing page whether to offer the
+// demo, and tells a signed-in demo user to show the demo banner. A signed-in
+// demo user's stale data is refreshed here, so a visitor never sees week-old
+// sample dates.
+app.get("/api/demo/status", async (req, res) => {
+  try {
+    const demoId = getDemoUserId();
+    if (!demoId) {
+      return res.status(200).json({ enabled: false, isDemoUser: false });
+    }
+
+    let userId: string | null = null;
+    try {
+      userId = getAuth(req).userId ?? null;
+    } catch {
+      userId = null;
+    }
+
+    const isDemo = userId === demoId;
+    if (isDemo) await ensureFreshDemo(demoId);
+    return res.status(200).json({ enabled: true, isDemoUser: isDemo });
+  } catch (error) {
+    console.error("Failed to load demo status:", error);
+    return res.status(500).json({ error: "Failed to load demo status." });
+  }
+});
+
+// POST /api/demo/session — public, tightly rate limited. Returns a one-time
+// Clerk sign-in ticket for the demo user only, valid for 60 seconds.
+app.post("/api/demo/session", demoSessionRateLimiter, async (_req, res) => {
+  try {
+    const demoId = getDemoUserId();
+    if (!demoId) {
+      return res.status(404).json({ error: "Demo mode is not enabled." });
+    }
+
+    await ensureFreshDemo(demoId);
+
+    let token: string | undefined;
+    try {
+      const created = await clerkClient.signInTokens.createSignInToken({
+        userId: demoId,
+        expiresInSeconds: 60,
+      });
+      token = created.token;
+    } catch (err) {
+      console.error("Failed to create demo sign-in token:", err);
+      return res.status(503).json({ error: "The demo is not available right now." });
+    }
+
+    if (!token) {
+      return res.status(503).json({ error: "The demo is not available right now." });
+    }
+    return res.status(200).json({ ticket: token });
+  } catch (error) {
+    console.error("Failed to start demo session:", error);
+    return res.status(500).json({ error: "Failed to start the demo." });
+  }
+});
+
+// POST /api/demo/reset — the demo user (banner button) or an admin.
+app.post("/api/demo/reset", sensitiveRateLimiter, async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const demoId = getDemoUserId();
+    if (!demoId) {
+      return res.status(404).json({ error: "Demo mode is not enabled." });
+    }
+
+    if (userId !== demoId && !(await isUserAdmin(userId))) {
+      return res
+        .status(403)
+        .json({ error: "Only the demo account or an admin can reset the demo." });
+    }
+
+    if (await demoWasJustReset(demoId)) {
+      return res.status(429).json({
+        error: `The demo was reset a moment ago. Try again in ${Math.ceil(
+          DEMO_RESET_COOLDOWN_MS / 1000,
+        )} seconds.`,
+      });
+    }
+
+    await resetDemoData(demoId);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to reset demo data:", error);
+    return res.status(500).json({ error: "Failed to reset demo data." });
   }
 });
 

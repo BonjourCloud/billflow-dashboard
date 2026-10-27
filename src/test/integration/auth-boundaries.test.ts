@@ -7,6 +7,8 @@ const PUBLIC_ROUTES = new Set([
   "GET /api/ready",
   "GET /api/site-settings",
   "GET /api/pricing-tiers",
+  "GET /api/demo/status",
+  "POST /api/demo/session",
 ]);
 
 const SAMPLE_OBJECT_ID = "507f1f77bcf86cd799439011";
@@ -79,7 +81,10 @@ describe("Phase 4D — authentication boundaries over HTTP", () => {
     for (const route of PUBLIC_ROUTES) {
       const [method, path] = route.split(" ");
       const res = await harness.request(method, path);
-      expect(res.status, route).toBe(200);
+      // Starting a demo session is a public POST; without DEMO_CLERK_USER_ID
+      // the demo is off and it answers 404 (never 401, never a ticket).
+      const expected = route === "POST /api/demo/session" ? 404 : 200;
+      expect(res.status, route).toBe(expected);
     }
   });
 

@@ -91,6 +91,20 @@ export function useUser() {
 export function useClerk() {
   const { setUserId } = useContext(SessionContext);
   return {
+    // Ticket sign-in (demo account): the ticket is the API token `e2e:<userId>`.
+    client: {
+      signIn: {
+        create: async ({ ticket }: { strategy: string; ticket: string }) => ({
+          status: 'complete',
+          createdSessionId: ticket,
+        }),
+      },
+    },
+    setActive: async ({ session }: { session: string }) => {
+      const id = session.replace(/^e2e:/, '');
+      localStorage.setItem(E2E_USER_KEY, id);
+      setUserId(id);
+    },
     // Real Clerk shows its sign-in modal; the stand-in signs in the user the
     // test chose (E2E_NEXT_USER_KEY) and follows the same redirect.
     openSignIn: async (options: { forceRedirectUrl?: string } = {}) => {

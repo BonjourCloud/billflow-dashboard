@@ -13,6 +13,8 @@ The app no longer uses mock data: every screen reads and writes through the Expr
 | Clerk Backend API (user lookups) | Real (`clerkClient`) | Mocked | In-memory fake directory | Not used |
 | AWS S3 (logos) | Real when AWS credentials are set; otherwise uploads return 503 | Client configuration only | Not used | Not used |
 
+**Demo sign-in ticket:** in the running app the server asks Clerk for a real one-time sign-in ticket and the browser exchanges it for a session. Integration tests replace the Backend API call with a fake token (`ticket_<userId>`); full-stack journeys replace both sides with the `e2e:<userId>` stand-in. The real ticket exchange has not been verified against a live Clerk instance.
+
 **Full-stack journeys** (`npm run test:e2e:fullstack`) use the real Express API and a real (in-memory) MongoDB, and the production frontend build. Only Clerk is substituted: a test-only stand-in for `@clerk/react` in the browser, header-based auth on the API, and a stubbed Clerk Backend API. S3 is not used.
 
 ## Features that are intentionally local

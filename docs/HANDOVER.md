@@ -21,6 +21,7 @@ For Rajiv. This page records the state at Iteration 5 (the verification figures 
 | Month-scoped dashboard | Monthly Flow, stats and Upcoming follow the selected month; recurring bills for months not yet generated are projected in the browser. | `src/lib/billMonth.ts`, `useBillStore`, `useMonthBills` |
 | Stale-deploy handling | A blank page after a release (old tab, new chunks) now triggers one automatic reload, or a reload screen. | `src/lib/chunkReload.ts`, `ChunkErrorBoundary` |
 | Budgeting (Phase 1) | Income sources, a Cash Flow card, per-category monthly limits, an optional needs/wants/savings split, and an EMI-share warning. All configurable per user; category type (Need/Want/Savings) is set by admins. | `IncomeSource`, `Budget`, `BudgetSettings` models; `/api/income`, `/api/budgets`, `/api/budget-settings`; Budget tab |
+| Demo account | One-click "Try the demo" signs visitors into a shared Clerk user holding generated sample data (₹1,00,000 income, 20,000 rent, about 63% of income going to bills and savings). Reset by banner button, Admin card, `npm run seed:demo`, and automatically after 24 hours. | `demoService.ts`, `/api/demo/*`, `DemoBanner`, [DEMO.md](DEMO.md) |
 | Docs | API, architecture, design, testing, deployment, mocked-vs-real and this page updated; new [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md). | `docs/` |
 
 Test counts in the next section are Iteration 5 figures and are now out of date; run the commands in [TESTING.md](TESTING.md) for current numbers. On a Node 22 machine five currency formatting tests fail (`₹1.0Cr` vs `₹1Cr`); the project targets Node 24.
@@ -89,6 +90,10 @@ Use a Clerk development instance with two test users: one listed in `ADMIN_CLERK
 13. **Categories** (admin): Admin → Categories; add "Pet care" as a Want, hide it, and confirm it disappears from the Add Bill dropdown but old bills keep their label.
 14. **Income and cash flow**: Budget → Income, add a monthly salary; the dashboard Cash Flow card shows free-to-spend; switch months and confirm recurring bills are included. Mark this month's income received.
 15. **Budgets**: Budget → Budgets, set a limit on one category below its spend and check it turns red with "over by"; Budget → Settings, switch to the needs/wants/savings split and save.
+
+## Demo account checklist
+
+After the one-time setup in [DEMO.md](DEMO.md): from the signed-out landing page click Try the demo; confirm the banner, Monthly Flow with free-to-spend, Budget → Income, Budgets (Entertainment over by ₹268), the overdue water tanker bill, the Laptop EMI plan, subscriptions, and reminders; click Reset demo and confirm the data returns to its starting state.
 
 ## Open items and limitations
 

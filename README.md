@@ -65,3 +65,4 @@ Create a Clerk development instance, enable the sign-in methods you want (the UI
 - [docs/TESTING.md](docs/TESTING.md) — test commands and what each suite verifies
 - [docs/MOCKED-VS-REAL.md](docs/MOCKED-VS-REAL.md) — which integrations are real and what tests substitute
 - [docs/DESIGN.md](docs/DESIGN.md) — design system: tokens, layout, motion rules
+- [docs/DEMO.md](docs/DEMO.md) — demo account: setup, reset, and a presenting walkthrough

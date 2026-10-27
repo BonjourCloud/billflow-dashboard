@@ -1,3 +1,4 @@
+import { useDemo } from '@/hooks/useDemo';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Zap, Shield, BarChart3, CreditCard, Bell, TrendingUp, CheckCircle2, Star } from 'lucide-react';
@@ -50,9 +51,10 @@ export default function Landing() {
   const { isAdmin } = useUserRole();
   const { settings } = useSiteSettings();
   const { tiers } = usePricingTiers();
+  const demo = useDemo();
 
   const Logo = () => settings.logo_url ? (
-    <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="h-10 w-auto max-w-[160px] rounded-lg object-contain" />
+    <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-8 h-8 rounded-lg object-contain" />
   ) : (
     <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
       <Zap className="w-4 h-4 text-primary-foreground" />
@@ -111,8 +113,14 @@ export default function Landing() {
             <Button size="lg" className="text-base px-8 h-12" onClick={() => navigate('/login')}>
               {settings.hero_cta_label} <ArrowRight className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="lg" className="text-base px-8 h-12" onClick={() => navigate('/dashboard')}>
-              View Demo
+            <Button
+              variant="outline"
+              size="lg"
+              className="text-base px-8 h-12"
+              disabled={demo.starting}
+              onClick={() => (demo.status.enabled && !session ? demo.startDemo() : navigate('/dashboard'))}
+            >
+              {demo.starting ? 'Opening demo…' : demo.status.enabled && !session ? 'Try the demo' : 'View Demo'}
             </Button>
           </motion.div>
         </div>

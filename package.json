@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
+    "seed:demo": "npm run seed:demo --prefix server",
     "test:e2e": "playwright test",
     "test:e2e:fullstack": "playwright test -c playwright.fullstack.config.ts"
   },

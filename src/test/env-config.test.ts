@@ -123,6 +123,22 @@ describe("Phase 4A — Server environment validation", () => {
     );
   });
 
+  it("validates DEMO_CLERK_USER_ID and keeps it out of the admin list", () => {
+    expect(() =>
+      validateServerEnv({ ...validDevEnv, DEMO_CLERK_USER_ID: "user_demo123" }),
+    ).not.toThrow();
+    expect(issuesFor({ ...validDevEnv, DEMO_CLERK_USER_ID: "demo" }).join(" ")).toContain(
+      "DEMO_CLERK_USER_ID",
+    );
+    expect(
+      issuesFor({
+        ...validDevEnv,
+        DEMO_CLERK_USER_ID: "user_demo123",
+        ADMIN_CLERK_USER_IDS: "user_admin1, user_demo123",
+      }).join(" "),
+    ).toContain("must not also be listed");
+  });
+
   it("validates ADMIN_CLERK_USER_IDS entries as Clerk user IDs", () => {
     expect(
       validateServerEnv({

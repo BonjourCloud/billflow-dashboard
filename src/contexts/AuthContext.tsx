@@ -30,6 +30,8 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  /** Signs in with a one-time ticket from the API (used by the demo account). */
+  signInWithTicket: (ticket: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -81,6 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithTicket = async (ticket: string) => {
+    const attempt = await clerk.client?.signIn.create({
+      strategy: 'ticket',
+      ticket,
+    });
+    if (!attempt || attempt.status !== 'complete' || !attempt.createdSessionId) {
+      throw new Error('Could not start the demo. Please try again.');
+    }
+    await clerk.setActive({ session: attempt.createdSessionId });
+  };
+
   const signOut = async () => {
     await clerk.signOut({ redirectUrl: '/' });
   };
@@ -94,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading: !isLoaded || signInLoading,
         signInWithGoogle,
+        signInWithTicket,
         signOut,
       }}
     >

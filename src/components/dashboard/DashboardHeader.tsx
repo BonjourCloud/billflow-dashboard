@@ -1,3 +1,4 @@
+import { DemoBanner } from '@/components/DemoBanner';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Moon, Sun, Receipt, Shield, LogOut } from 'lucide-react';
@@ -46,6 +47,8 @@ export function DashboardHeader() {
   const isBudgetActive = location.pathname.startsWith('/budget');
 
   return (
+    <>
+    <DemoBanner />
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
@@ -131,5 +134,6 @@ export function DashboardHeader() {
         )}
       </div>
     </header>
+    </>
   );
 }

@@ -87,6 +87,12 @@ All `/api` routes are limited to 1000 requests per 15 minutes per signed-in user
 
 Counters are kept in each instance's memory. With a single instance this is exact; if you scale to several instances, each counts separately (a shared store such as Redis would be needed for global limits). `TRUST_PROXY=1` is required on Render so limits use the real client IP instead of Render's proxy.
 
+### Demo account (optional)
+
+1. In the Clerk dashboard create a user for the demo (for example `demo@billwill.site`) and copy its ID (`user_…`).
+2. Set `DEMO_CLERK_USER_ID` on Render to that ID (it must not be in `ADMIN_CLERK_USER_IDS`) and redeploy the API.
+3. The landing page now shows **Try the demo**. Data is generated on first use and refreshed every 24 hours; `npm run seed:demo` resets it from a terminal. Full details in [DEMO.md](DEMO.md).
+
 ### Admin access
 
 - `ADMIN_CLERK_USER_IDS` lists Clerk user IDs (`user_…`) that are always admins. Use it to bootstrap the first admin, then grant others from **Admin → Users**.
@@ -141,6 +147,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 | `CLERK_PUBLISHABLE_KEY` | Yes | Same key as the frontend |
 | `TRUST_PROXY` | — | Proxy hops in front of the API; `0` by default, `1` on Render |
 | `ADMIN_CLERK_USER_IDS` | — | Comma-separated Clerk user IDs (`user_…`) |
+| `DEMO_CLERK_USER_ID` | — | Clerk user ID of the shared demo user; unset disables the demo |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Must be set together; enable logo uploads |
 | `AWS_REGION` | — | e.g. `us-east-1` |
 | `AWS_S3_BUCKET` | Production, if AWS credentials are set | Bucket for logos |
@@ -170,3 +177,4 @@ Run these the first time you deploy and after configuration changes:
 7. Open **Admin → Categories**: the categories list loads, and each has a Need / Want / Savings type.
 8. Open **Budget → Income**, add a monthly income, and check that the Cash Flow card on the dashboard shows it. Open **Budget → Budgets**, set a limit, reload, and confirm it persisted.
 9. Switch the dashboard to next month and confirm recurring bills still appear (projected).
+10. If the demo is enabled, click **Try the demo** on the landing page while signed out: you land on the dashboard with the Demo banner. Click **Reset demo** and confirm it succeeds.

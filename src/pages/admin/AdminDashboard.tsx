@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { IndianRupee, Palette, ImageIcon, Users, ArrowRight } from 'lucide-react';
+import { IndianRupee, Palette, ImageIcon, Users, ArrowRight, RotateCcw, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useDemo } from '@/hooks/useDemo';
 import { apiRequest } from '@/lib/api';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { usePricingTiers } from '@/hooks/usePricingTiers';
@@ -8,6 +10,7 @@ import { usePricingTiers } from '@/hooks/usePricingTiers';
 export default function AdminDashboard() {
   const { settings } = useSiteSettings();
   const { tiers } = usePricingTiers({ includeHidden: true });
+  const demo = useDemo();
   const [adminCount, setAdminCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -58,6 +61,23 @@ export default function AdminDashboard() {
           </Link>
         ))}
       </div>
+
+      {demo.status.enabled && (
+        <div className="glass-card rounded-2xl p-5 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Sparkles className="w-4 h-4 text-primary" /> Demo account
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sample data for showing the app. It resets by itself every day; reset it now before a presentation.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={demo.resetDemo} disabled={demo.resetting} className="gap-1.5 shrink-0">
+            <RotateCcw className="w-3.5 h-3.5" />
+            {demo.resetting ? 'Resetting…' : 'Reset demo data'}
+          </Button>
+        </div>
+      )}
 
       <div className="glass-card rounded-2xl p-5">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
