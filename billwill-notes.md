@@ -281,6 +281,51 @@ fullstack e2e journey.
 
 ---
 
+## 6d. Phase 2 — Log a spend & Goals (commit `d5eec0f`, e2e fix `ada319b`)
+
+Two features. Frontend-heavy; **Goals adds a backend model/API** so it needs a
+Render redeploy (done).
+
+**Log a spend (QuickSpend):** a round FAB at the bottom-right of every signed-in
+page (`src/components/QuickSpend.tsx`, mounted in `DashboardHeader`). Enter
+amount, category, date, optional note. It saves as an **already-paid bill dated
+that day**, so budgets and Free to spend update immediately. No backend change —
+reuses the existing bills API.
+
+**Goals (Budget → Goals):** name + target amount + target date → BillWill computes
+the monthly amount (e.g. ₹1,35,000 over 4 months = ₹33,750/mo). Each goal shows
+progress and a status (on track / behind plan / funded / paused / past target
+date), an **In plan** switch, and an **Add money** button.
+- New backend model `server/src/models/Goal.ts` + `/api/goals` routes.
+- Frontend: `src/pages/budget/GoalsTab.tsx`, `src/hooks/useGoals.ts`,
+  `src/lib/goals.ts`, `src/data/goals.ts`.
+- **Cash Flow card**: each active in-plan goal's monthly amount is subtracted
+  from **Free to spend**, and the card shows a "Goals" figure. **Add money** only
+  records progress (money was already reserved by the plan), so Free to spend
+  doesn't drop twice.
+
+**Demo:** now seeds **4 goals** (one each: on track, behind plan, funded, paused)
+and the one-off ₹33,750 school-fee bill was removed (the goal replaces it). After
+a demo reset, Free to spend is ~₹6,500/mo (goals reserve ~₹15,250) — expected.
+
+**Tests:** 19 goals unit tests (`src/test/goals.test.ts`), goals integration
+(`src/test/integration/goals.test.ts`), and two new fullstack browser journeys.
+Local run: lint ✅, 480 unit ✅, 233 integration ✅ (the 3 Windows-only
+`deploy-readiness` failures are unrelated).
+
+**e2e harness fix (`ada319b`):** the fullstack webServer crashed in CI because the
+demo-session feature calls `clerkClient.signInTokens.createSignInToken(...)`, and
+the harness stubbed it with a direct assignment — rejected by Clerk's lazy Proxy
+`set` trap (`'set' on proxy: trap returned falsish`). Fixed by attaching the stub
+with `Object.defineProperty(clerkClient, "signInTokens", { configurable: true,
+value: {...} })`. Verified the harness now boots past the failing line locally.
+
+**Phase 2 limitations:** the 50/30/20 summary does not count goal money as
+savings; a logged spend appears in the bills list as a paid bill (no separate
+list); household sharing deferred.
+
+---
+
 ## 7. Monthly Flow month logic (recent work)
 
 Two frontend-only changes, built around `src/lib/billMonth.ts` (+ `bill-month.test.ts`):
@@ -353,6 +398,7 @@ every request) or UI grant (stored in MongoDB).
 - **Subscriptions:** `GET/POST /subscriptions`, `GET/PATCH/DELETE /subscriptions/:id`, `PATCH /subscriptions/:id/cancel`
 - **Notifications:** `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/:id/read`, `PATCH /notifications/read-all`, `PATCH /notifications/:id/dismiss`
 - **Budget (Phase 1):** `GET/POST /income-sources`, `PATCH/DELETE /income-sources/:id` (+ received-cycle toggle), `GET/PUT /budgets` (per-category limits), `GET/PATCH /budget-settings` (need/want/savings %). (See `server/src/index.ts` for exact shapes.)
+- **Goals (Phase 2):** `GET/POST /goals`, `PATCH/DELETE /goals/:id` (name/target/date/in-plan/pause), `POST /goals/:id/contributions` (Add money). (See `server/src/index.ts`.)
 - **Demo:** `GET /demo/status` (public — is demo enabled / is caller the demo user), `POST /demo/session` (public, rate-limited — returns a 60s Clerk sign-in ticket), `POST /demo/reset` (demo user or admin — re-seeds demo data).
 - **Admin:** `GET /admin/users`, `POST /admin/users/:id/grant-admin`, `POST /admin/users/:id/revoke-admin`, `GET /admin/summary`, `POST/PATCH/DELETE /admin/categories[/:id]` (category `kind`), `POST/PATCH/DELETE /admin/pricing-tiers[/:id]`, `PATCH /admin/branding`, `POST /admin/branding/logo`, `PATCH /admin/site-settings`
 
@@ -398,6 +444,12 @@ without a token.
   `DEMO_CLERK_USER_ID`, seeded sample data across every feature. Pushed
   (`fde5ea3`). Clerk demo user + Render env var done; API redeployed. 48
   demo-data unit tests + demo integration tests pass.
+- **Logo + favicon**: BillWill logo self-hosted at `/billwill-logo.png`, set as
+  branding logo and the browser-tab favicon (`index.html`). Pushed.
+- **Phase 2 (Log a spend + Goals)**: QuickSpend FAB + savings Goals with
+  in-plan reservation from Free to spend; demo seeds 4 goals. Pushed (`d5eec0f`),
+  Render redeployed. Fixed a CI-only e2e harness crash (Clerk proxy) in
+  `ada319b`. 19 goals unit + goals integration tests pass.
 
 ### Pending / to consider
 - **Verify demo end-to-end** in a private window: Try the demo → banner, Cash
@@ -434,6 +486,10 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+ada319b  fix(e2e): define signInTokens stub via Object.defineProperty to bypass Clerk proxy set trap
+d5eec0f  feat: Phase 2 - Log a spend quick entry and savings Goals
+3b81386  fix: use BillWill logo as favicon/tab icon
+c1bf4f8  docs: update logo notes for self-hosted billwill-logo.png
 cf120c6  feat: add BillWill logo asset and enlarge dashboard header logo
 4572941  docs: add demo account and DEMO_CLERK_USER_ID to billwill-notes
 fde5ea3  feat: one-click demo account with seeded sample data
