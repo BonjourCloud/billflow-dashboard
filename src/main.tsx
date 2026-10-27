@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/react";
 import App from "./App.tsx";
 import { resolveClerkPublishableKey } from "./lib/clerkPublishableKey";
 import { installChunkErrorReload } from "./lib/chunkReload";
+import { initAnalytics } from "./lib/analytics";
 import "./index.css";
 
 const clerkPublishableKey = resolveClerkPublishableKey(
@@ -11,6 +12,7 @@ const clerkPublishableKey = resolveClerkPublishableKey(
 );
 
 installChunkErrorReload();
+initAnalytics(import.meta.env.VITE_GA_MEASUREMENT_ID);
 
 createRoot(document.getElementById("root")!).render(
   <ClerkProvider publishableKey={clerkPublishableKey}>

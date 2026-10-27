@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { trackEvent } from '@/lib/analytics';
 
 export interface DemoStatus {
   /** The server has a demo account configured. */
@@ -41,6 +42,7 @@ export function useDemo() {
         authenticated: false,
       });
       await signInWithTicket(ticket);
+      trackEvent('demo_started');
       queryClient.clear();
       navigate('/dashboard');
     } catch (err) {

@@ -134,6 +134,7 @@ Client-safe values use `VITE_`-prefixed variables (e.g. `VITE_API_URL`, `VITE_CL
 |---|---|---|
 | `VITE_API_URL` | Production builds | API origin; must be `https://` in production builds (except `localhost`). Development falls back to `http://localhost:5001`. |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Always | `pk_test_…` or `pk_live_…` |
+| `VITE_GA_MEASUREMENT_ID` | Optional | Google Analytics 4 Measurement ID (`G-…`). Set in **Production only**; when unset nothing is loaded. See [ANALYTICS.md](ANALYTICS.md). |
 
 ### Backend (Render)
 
