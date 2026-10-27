@@ -51,13 +51,17 @@ export function DashboardHeader() {
     <DemoBanner />
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
-          {settings.logo_url ? (
-            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-5 h-5 object-contain" />
-          ) : (
+        {settings.logo_url ? (
+          <img
+            src={settings.logo_display_url || settings.logo_url || ''}
+            alt={settings.brand_name}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl object-contain shrink-0"
+          />
+        ) : (
+          <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
             <Receipt className="w-5 h-5 text-primary" />
-          )}
-        </div>
+          </div>
+        )}
         <div>
           <h1 className="text-xl font-bold tracking-tight">{settings.brand_name}</h1>
           <p className="text-xs text-muted-foreground">Subscriptions & Bill Management</p>
