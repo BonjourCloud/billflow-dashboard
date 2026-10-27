@@ -471,6 +471,60 @@ without a token.
 
 ---
 
+## 11b. CI — GitHub Actions (`.github/workflows/ci.yml`)
+
+**This is CI, not CI/CD.** It tests code; it does **not** deploy. Deployment is
+still separate: Render (manual redeploy or auto on push) + Vercel (auto on push).
+The two systems independently watch the repo, so **a red CI run does NOT block a
+Vercel/Render deploy** — they're not linked.
+
+Runs on push to `main`/`feature/**`, on PRs, and manual dispatch. Node 24,
+Ubuntu, `permissions: contents: read`, no deploy step. Five jobs:
+- **frontend** — lint, typecheck, unit tests, integration tests (in-memory
+  MongoDB replica set), production build compile-check.
+- **server** — backend typecheck + build.
+- **e2e** — signed-out browser smoke tests (needs `VITE_CLERK_PUBLISHABLE_KEY`
+  repo secret; skipped if unset, e.g. fork PRs).
+- **fullstack-e2e** ("Full-stack browser journeys") — production build + test
+  Clerk stand-in against the real API on in-memory Mongo, at desktop/tablet/mobile.
+  Needs no secrets. Uploads a Playwright report artifact on failure.
+
+**Why CI matters even with manual deploys:** it runs on a clean Linux machine, so
+it catches what Windows can't run locally (integration + fullstack suites) and
+what Vercel/Render never run (Vercel only compile-checks; Render only builds +
+starts). It caught several real bugs this project (Clerk proxy crash, calendar
+popover covering the submit button).
+
+**Gap / next step for real CI/CD:** gate deploys behind CI — e.g. Vercel required
+checks waiting on GitHub Actions, or a deploy job (vercel deploy / Render deploy
+hook) that runs only on green.
+
+---
+
+## 11c. Full-stack e2e fix saga (for reference)
+
+The "Full-stack browser journeys" CI job took several rounds; all were bugs in
+the *test code*, not the app:
+- `ada319b` — harness crashed: `signInTokens` stub assigned onto Clerk's lazy
+  Proxy (rejected by `set` trap). First patched via `Object.defineProperty` (got
+  it to boot).
+- `ec2504c` — superseded: stub patched **in place** on resolved
+  `clerkClient.signInTokens.createSignInToken` (the earlier one wasn't read by the
+  app → real Clerk "Unauthorized"); plus the bill journey now picks the Due Date
+  via the **calendar popover** instead of `.fill()` on a button.
+- `a59faac` — scoped "Broadband" match to a table row (the success toast also
+  held the name and detached mid-click); relaxed goal assertions; added
+  `actionTimeout: 10_000` for clearer failures.
+- `4d95793` — **root cause**: the calendar popover stayed open and covered the
+  "Add Bill" button, so the submit click never landed. Now dismisses the popover
+  (click the dialog heading) before submitting.
+
+Lesson captured: these only reproduce in CI (Linux + MongoDB + real browser);
+grab the uploaded **Playwright trace artifact** from the failed job to diagnose,
+rather than guessing from the text log.
+
+---
+
 ## 12. Status: done vs pending
 
 ### Done
@@ -502,8 +556,13 @@ without a token.
 - **Google Analytics (GA4)**: opt-in via `VITE_GA_MEASUREMENT_ID` (Vercel
   Production), `demo_started` event, `docs/ANALYTICS.md`. Pushed (`1eac57a`);
   env var set in Vercel + redeployed.
+- **CI (GitHub Actions)**: 5-job test pipeline (see §11b). Fullstack e2e journey
+  stabilized over 4 rounds (see §11c); final root-cause fix `4d95793`.
 
 ### Pending / to consider
+- **CI/CD gap:** CI (GitHub Actions) and deploys (Vercel/Render) are not linked —
+  a red CI run does not block a deploy. For real CI/CD, gate deploys on green
+  (Vercel required checks, or a deploy job triggered only after tests pass).
 - **Verify demo end-to-end** in a private window: Try the demo → banner, Cash
   Flow card, Budget → Income shows Salary ₹1,00,000. Confirm demo data is
   isolated from the personal account.
@@ -538,6 +597,9 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+4d95793  fix(e2e): dismiss calendar popover before clicking Add Bill
+a59faac  fix(e2e): scope bill row to table, relax goal assertions, add actionTimeout
+602a3ae  docs: add Google Analytics (6e), env var, and the e2e in-place/calendar fix
 ec2504c  fix(e2e): patch createSignInToken in place and pick due date via calendar popover
 1eac57a  feat: Google Analytics 4 (opt-in via VITE_GA_MEASUREMENT_ID) with demo_started event
 6c315f7  docs: document favicon + Open Graph social-preview setup
