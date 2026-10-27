@@ -89,7 +89,7 @@ Counters are kept in each instance's memory. With a single instance this is exac
 
 ### Demo account (optional)
 
-1. In the Clerk dashboard create a user for the demo (for example `demo@billwill.site`) and copy its ID (`user_…`).
+1. In the Clerk dashboard enable **Sign-in with email** (Configure → User & authentication → Email), then create a user for the demo with a verified email (in a development instance, `demo+clerk_test@billwill.site`) and copy its ID (`user_…`). A user without an email makes the demo fail with "The given token doesn't have an associated identification".
 2. Set `DEMO_CLERK_USER_ID` on Render to that ID (it must not be in `ADMIN_CLERK_USER_IDS`) and redeploy the API.
 3. The landing page now shows **Try the demo**. Data is generated on first use and refreshed every 24 hours; `npm run seed:demo` resets it from a terminal. Full details in [DEMO.md](DEMO.md).
 

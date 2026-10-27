@@ -92,7 +92,9 @@ export interface CashFlow {
   bills: number;
   /** Bills in savings-type categories (SIPs, RDs...). */
   saved: number;
-  /** income - bills - saved. Negative means a shortfall. */
+  /** Planned monthly set-aside for savings goals. */
+  goals: number;
+  /** income - bills - saved - goals. Negative means a shortfall. */
   free: number;
   /** saved / income, 0 when there is no income. */
   savingsRate: number;
@@ -113,6 +115,8 @@ export function computeCashFlow(
   occurrences: IncomeOccurrence[],
   bills: Bill[],
   categories: Pick<Category, 'slug' | 'kind'>[],
+  /** Money reserved this month for savings goals (see lib/goals). */
+  goalsReserve = 0,
 ): CashFlow {
   const counted = occurrences.filter((o) => o.counted);
   const income = round2(counted.reduce((s, o) => s + o.amount, 0));
@@ -132,7 +136,8 @@ export function computeCashFlow(
     received,
     bills: round2(billsTotal),
     saved: round2(saved),
-    free: round2(income - billsTotal - saved),
+    goals: round2(goalsReserve),
+    free: round2(income - billsTotal - saved - goalsReserve),
     savingsRate: income > 0 ? saved / income : 0,
     billsShare: income > 0 ? billsTotal / income : null,
     emiRatio: income > 0 ? emi / income : null,

@@ -91,6 +91,21 @@ Income sources are per user. Occurrences are worked out on the fly (monthly sour
 
 Spent amounts, free-to-spend and the savings rate are not returned by the API: the browser computes them from bills, income and these settings (`src/lib/cashFlow.ts`).
 
+## Goals
+
+Savings goals with a fixed monthly set-aside. `savedAmount` is the sum of the contributions and is computed by the server. A goal's set-aside from its start month to its target month is reserved in Free to spend by the browser (`src/lib/cashFlow.ts`, `src/lib/goals.ts`); contributions only track progress.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/goals` | user | `[{ _id, name, targetAmount, targetDate, startDate, monthlyAmount, isActive, savedAmount, contributions: [{ _id, amount, date, note }] }]`, oldest first; contributions newest first |
+| POST | `/api/goals` | user | `{ name, targetAmount, targetDate, monthlyAmount? }` (amounts > 0 and up to 1,000,000,000). `monthlyAmount` defaults to the target divided by the months from this month to the target month (both included), rounded up to a whole rupee. `400` if the target month is before this month or more than 50 years away. |
+| PATCH | `/api/goals/:id` | user | Any of `name`, `targetAmount`, `targetDate`, `monthlyAmount`, `isActive`. Changing the target amount or date without `monthlyAmount` re-plans the monthly amount. `404` for another user's goal. |
+| DELETE | `/api/goals/:id` | user | Deletes the goal and its contributions. `{ success: true }` |
+| POST | `/api/goals/:id/contributions` | user | `{ amount, date?, note? }` (note up to 100 characters). Returns the updated goal. At most 500 contributions per goal (`400` beyond that). |
+| DELETE | `/api/goals/:id/contributions/:contributionId` | user | Returns the updated goal; `404` if the entry is not on that goal. |
+
+**Log a spend** has no endpoint of its own: the browser creates an already-paid, one-time bill with `POST /api/bills` (`status: "paid"`, dated on the day of the spend), so budgets and Cash Flow count it.
+
 ## Payments and notes
 
 | Method | Path | Auth | Notes |

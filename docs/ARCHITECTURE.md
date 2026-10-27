@@ -90,6 +90,7 @@ Middleware runs in this order (`server/src/index.ts`):
 | `Category` | Bill category managed by admins: unique `slug`, label, color, `kind` (`need`/`want`/`savings`), active flag. Seeded with 12 defaults when empty. Referenced by slug from bills, series, plans and budgets |
 | `IncomeSource` | A user's income (monthly or one-time), whether it counts in the plan, and which `YYYY-MM` cycles were received. Occurrences are computed, not stored |
 | `Budget` | One monthly limit per user and category (unique pair) |
+| `Goal` | A savings goal: target amount and date, planned monthly set-aside, in-plan switch, and an embedded ledger of contributions (at most 500). Saved amount, pace and the monthly reserve are computed |
 | `BudgetSettings` | One document per user: method, needs/wants/savings split, EMI warning threshold |
 | `SiteSettings` | Branding and theme settings (single document) |
 
@@ -111,10 +112,11 @@ The environment is validated when the server module loads (skipped when `NODE_EN
 
 ## Frontend
 
-- **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`, `/budget/income`, `/budget/budgets`, `/budget/settings`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, categories, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
+- **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`, `/budget/income`, `/budget/budgets`, `/budget/goals`, `/budget/settings`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, categories, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
 - **API access** (`src/lib/api.ts`): adds `Authorization: Bearer <Clerk token>` unless a call is marked unauthenticated, and turns API JSON errors into thrown `Error`s with the server's message.
 - **Data hooks** (`src/hooks/`): one hook per feature, using TanStack Query or local state over the API. Notifications poll every 60 seconds.
 - **Branding and theme** come from `GET /api/site-settings` (schema defaults until an admin first saves) and are applied as CSS variables and the document title; light/dark preference is stored in `localStorage`. `index.html` carries static BillWill metadata for crawlers and link previews.
+- **Goals and Log a spend** (`src/pages/budget/GoalsTab.tsx`, `src/lib/goals.ts`, `src/hooks/useGoals.ts`, `src/components/QuickSpend.tsx`): a goal reserves its monthly amount in Free to spend from its start month to its target month; contributions only track progress. Log a spend is a floating button on every signed-in page that posts an already-paid one-time bill.
 - **Month scope** (`src/lib/billMonth.ts`, `useBillStore`, `useMonthBills`): the dashboard and the Budget pages work on one selected month. Stats count bills due in that month plus unpaid ones carried over from earlier months, and recurring bills not yet created are projected from their series. Due dates are UTC midnight, so months are matched in UTC; "current month" uses local time.
 - **Budget** (`src/pages/budget/`, `src/lib/cashFlow.ts`, `src/hooks/useBudget.ts`): all figures are computed in the browser. Free to spend = expected income (sources counted in the plan) − bills − money saved (bills in `savings` categories). EMIs are bills with an installment plan or in the Loans category; their share of income is compared with the configured threshold. The Cash Flow card on the dashboard and the Budgets tab share the same month hooks and query keys as the bill list.
 - **Stale deploys** (`src/lib/chunkReload.ts`, `ChunkErrorBoundary`): after a deploy, an open tab can request a lazy chunk that no longer exists. The app reloads once (guarded by `sessionStorage` to avoid loops) on Vite's `vite:preloadError` or a failed dynamic import, and otherwise shows a "reload" screen instead of a blank page.

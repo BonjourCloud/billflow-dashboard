@@ -3,6 +3,7 @@ import { Bill } from "../models/Bill.js";
 import { BillNote } from "../models/BillNote.js";
 import { Budget, BudgetSettings } from "../models/Budget.js";
 import { Category, DEFAULT_CATEGORIES } from "../models/Category.js";
+import { Goal } from "../models/Goal.js";
 import { IncomeSource } from "../models/IncomeSource.js";
 import {
   InstallmentPlan,
@@ -21,7 +22,8 @@ import {
  * Demo account: one dedicated Clerk user (DEMO_CLERK_USER_ID) whose data is
  * wiped and re-created from a fixed, realistic dataset. Dates are relative to
  * "now", so the demo always looks current. The dataset touches every feature:
- * income (counted, uncounted, one-time), recurring bills and subscriptions
+ * income (counted, uncounted, one-time), savings goals (on track, behind,
+ * funded, paused), recurring bills and subscriptions
  * (including a cancelled one), installment plans (active and completed),
  * paid / partly paid / overdue / due-soon bills, notes, budgets in every
  * status, and the needs/wants/savings split.
@@ -72,6 +74,7 @@ export interface DemoDataset {
   notes: Array<Record<string, unknown>>;
   income: Array<Record<string, unknown>>;
   budgets: Array<{ userId: string; category: string; limit: number }>;
+  goals: Array<Record<string, unknown>>;
   settings: Record<string, unknown>;
 }
 
@@ -224,14 +227,6 @@ export function buildDemoDataset(userId: string, now: Date): DemoDataset {
     { name: "Weekend family dinner", amount: 2000, category: "entertainment", day: 22 },
     { name: "Water tanker", amount: 1200, category: "utilities", dayOffset: -3 },
     { name: "Credit card bill", amount: 6000, category: "finance", dayOffset: 2 },
-    {
-      name: "School fee · Term 2",
-      amount: 33750,
-      category: "education",
-      monthOffset: 1,
-      day: 5,
-      note: "Term fee is due 3 times a year. Set money aside every month.",
-    },
   ];
   for (const spec of oneTime) {
     const due =
@@ -382,6 +377,55 @@ export function buildDemoDataset(userId: string, now: Date): DemoDataset {
     },
   ];
 
+  // ---- Savings goals ------------------------------------------------------
+  // One goal in each state: on track, behind plan, funded and paused.
+  interface GoalSpec {
+    name: string;
+    targetAmount: number;
+    startOffset: number;
+    targetOffset: number;
+    targetDay: number;
+    isActive: boolean;
+    // Month offsets (relative to now) on which a monthly set-aside was recorded.
+    contributedOffsets: number[];
+    contributionAmount: number;
+  }
+  const goalSpecs: GoalSpec[] = [
+    // ₹1,35,000 over 12 months = ₹11,250 a month, saved on schedule.
+    { name: "School fee fund", targetAmount: 135000, startOffset: -2, targetOffset: 9, targetDay: 5, isActive: true, contributedOffsets: [-2, -1], contributionAmount: 11250 },
+    // ₹24,000 over 6 months = ₹4,000 a month, one month's set-aside missed.
+    { name: "Goa trip", targetAmount: 24000, startOffset: -1, targetOffset: 4, targetDay: 20, isActive: true, contributedOffsets: [-1], contributionAmount: 2000 },
+    // Finished: every month's ₹6,000 was set aside.
+    { name: "New phone fund", targetAmount: 30000, startOffset: -5, targetOffset: -1, targetDay: 15, isActive: true, contributedOffsets: [-5, -4, -3, -2, -1], contributionAmount: 6000 },
+    // Switched off ("In plan" toggle), so it reserves nothing.
+    { name: "Bike down payment", targetAmount: 40000, startOffset: 0, targetOffset: 7, targetDay: 28, isActive: false, contributedOffsets: [], contributionAmount: 0 },
+  ];
+  const goals = goalSpecs.map((spec) => {
+    const start = shiftMonth(now, spec.startOffset);
+    const startDate = new Date(Date.UTC(start.year, start.month, 1));
+    const targetDate = dueOn(now, spec.targetOffset, spec.targetDay);
+    const months = Math.max(
+      1,
+      spec.targetOffset - spec.startOffset + 1,
+    );
+    return {
+      _id: new mongoose.Types.ObjectId(),
+      userId,
+      name: spec.name,
+      targetAmount: spec.targetAmount,
+      targetDate,
+      startDate,
+      monthlyAmount: Math.ceil(spec.targetAmount / months),
+      isActive: spec.isActive,
+      contributions: spec.contributedOffsets.map((offset) => ({
+        _id: new mongoose.Types.ObjectId(),
+        amount: spec.contributionAmount,
+        date: dueOn(now, offset, 8),
+        note: "Monthly set-aside",
+      })),
+    };
+  });
+
   // ---- Budgets ------------------------------------------------------------
   // Chosen so the Budgets tab shows every status: ok, warn and over.
   const budgets = [
@@ -404,7 +448,7 @@ export function buildDemoDataset(userId: string, now: Date): DemoDataset {
     emiRatioWarnPct: 40,
   };
 
-  return { series, plans, bills, payments, notes, income, budgets, settings };
+  return { series, plans, bills, payments, notes, income, budgets, goals, settings };
 }
 
 /** Makes sure a Savings category exists so saved money is counted as saved. */
@@ -460,6 +504,7 @@ export async function resetDemoData(
       InstallmentPlan.deleteMany({ userId }),
       IncomeSource.deleteMany({ userId }),
       Budget.deleteMany({ userId }),
+      Goal.deleteMany({ userId }),
       BudgetSettings.deleteMany({ userId }),
     ]);
 
@@ -470,6 +515,7 @@ export async function resetDemoData(
     await BillNote.insertMany(dataset.notes);
     await IncomeSource.insertMany(dataset.income);
     await Budget.insertMany(dataset.budgets);
+    await Goal.insertMany(dataset.goals);
     await BudgetSettings.create(dataset.settings);
 
     await User.updateOne(

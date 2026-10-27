@@ -244,5 +244,85 @@ test("opens the demo account with one click and shows sample data", async ({ pag
   await page.getByRole("link", { name: "Budgets" }).click();
   await expect(page.getByText("By category")).toBeVisible();
   await expectNoDollarSign(page, "demo budgets");
+
+  await page.getByRole("link", { name: "Goals" }).click();
+  await expect(page).toHaveURL(/\/budget\/goals$/);
+  await expect(page.getByText("School fee fund")).toBeVisible();
+  await expect(page.getByText("Goa trip")).toBeVisible();
+  await expect(page.getByText("Behind plan")).toBeVisible();
+  await expect(page.getByText("Funded", { exact: true })).toBeVisible();
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "demo goals");
+  await expectNoDollarSign(page, "demo goals");
+  expect(errors).toEqual([]);
+});
+
+test("logs a spend from anywhere and sees it in the bills list", async ({ page }, testInfo) => {
+  const errors = trackPageErrors(page);
+  await signInAs(page, uniqueUser(testInfo, "spend"));
+  await page.goto("/dashboard");
+
+  await page.getByRole("button", { name: "Log a spend" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Amount (₹)").fill("450");
+  await dialog.getByLabel("Note (optional)").fill("Auto fare");
+  await dialog.getByRole("button", { name: "Log spend" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.getByText("Auto fare").first()).toBeVisible();
+  await expect(page.getByText("₹450.00").first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, "dashboard after a spend");
+  await expectNoDollarSign(page, "dashboard after a spend");
+
+  // The button is on the other signed-in pages too.
+  await page.goto("/subscriptions");
+  await expect(page.getByRole("button", { name: "Log a spend" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("creates a savings goal, adds money, and takes the set-aside out of free money", async ({ page, request }, testInfo) => {
+  const errors = trackPageErrors(page);
+  const user = uniqueUser(testInfo, "goal");
+  await api(request, user).post("/api/income", {
+    name: "Salary",
+    amount: 100000,
+    frequency: "monthly",
+    startDate: dateInput(-60),
+  });
+  await signInAs(page, user);
+
+  // Three months ahead: this month and three more make four months, so ₹1,35,000 is ₹33,750 a month.
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 3, 5)).toISOString().slice(0, 10);
+
+  await page.goto("/budget/goals");
+  await page.getByRole("button", { name: "Add your first goal" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("School fee fund");
+  await dialog.getByLabel("Target amount (₹)").fill("135000");
+  await dialog.getByLabel("Target date").fill(target);
+  await expect(dialog.getByText(/₹33,750\.00 a month reaches the target on time/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+
+  const card = page.getByTestId("goal-card");
+  await expect(card.getByText("School fee fund")).toBeVisible();
+  await expect(card.getByText("₹33,750.00 a month")).toBeVisible();
+  await expect(page.getByTestId("goals-reserve")).toHaveText("₹33,750.00");
+  await expectNoHorizontalOverflow(page, "goals");
+  await expectNoDollarSign(page, "goals");
+
+  await card.getByRole("button", { name: "Add money" }).click();
+  const money = page.getByRole("dialog");
+  await expect(money.getByLabel("Amount (₹)")).toHaveValue("33750");
+  await money.getByRole("button", { name: "Save" }).click();
+  await expect(money).toBeHidden();
+  await expect(page.getByTestId("goals-saved")).toHaveText("₹33,750.00");
+
+  // Free to spend on the dashboard: income minus the planned set-aside (no bills).
+  await page.goto("/dashboard");
+  await expect(page.getByTestId("cashflow-free")).toHaveText("₹66,250.00");
+  await expect(page.getByText("Set aside for your goals")).toBeVisible();
+  await expectNoDollarSign(page, "dashboard with a goal");
   expect(errors).toEqual([]);
 });

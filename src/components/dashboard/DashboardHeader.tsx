@@ -1,4 +1,5 @@
 import { DemoBanner } from '@/components/DemoBanner';
+import { QuickSpend } from '@/components/QuickSpend';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Moon, Sun, Receipt, Shield, LogOut } from 'lucide-react';
@@ -49,13 +50,14 @@ export function DashboardHeader() {
   return (
     <>
     <DemoBanner />
+    <QuickSpend />
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
         {settings.logo_url ? (
           <img
             src={settings.logo_display_url || settings.logo_url || ''}
             alt={settings.brand_name}
-            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl object-contain shrink-0"
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-contain shrink-0"
           />
         ) : (
           <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">

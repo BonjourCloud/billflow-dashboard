@@ -3,6 +3,8 @@ import type { Bill } from "@/data/bills";
 import type { IncomeSource } from "@/data/budget";
 import { DEFAULT_CATEGORIES } from "@/data/categories";
 import { currentMonthKey, scopeBillsToMonth, shiftMonth } from "@/lib/billMonth";
+import type { Goal } from "@/data/goals";
+import { goalProgress, totalGoalReserve } from "@/lib/goals";
 import {
   budgetRows,
   computeCashFlow,
@@ -11,6 +13,7 @@ import {
 import { Bill as BillModel } from "../../server/src/models/Bill";
 import { BillNote } from "../../server/src/models/BillNote";
 import { Budget, BudgetSettings } from "../../server/src/models/Budget";
+import { Goal as GoalModel } from "../../server/src/models/Goal";
 import { IncomeSource as IncomeModel } from "../../server/src/models/IncomeSource";
 import { InstallmentPlan } from "../../server/src/models/InstallmentPlan";
 import { Payment } from "../../server/src/models/Payment";
@@ -50,6 +53,20 @@ function asClientBills(now: Date): Bill[] {
   }));
 }
 
+function asClientGoals(now: Date): Goal[] {
+  return buildDemoDataset(USER, now).goals.map((g) => ({
+    _id: String(g._id),
+    name: String(g.name),
+    targetAmount: Number(g.targetAmount),
+    targetDate: (g.targetDate as Date).toISOString(),
+    startDate: (g.startDate as Date).toISOString(),
+    monthlyAmount: Number(g.monthlyAmount),
+    isActive: Boolean(g.isActive),
+    savedAmount: (g.contributions as Array<{ amount: number }>).reduce((t, c) => t + c.amount, 0),
+    contributions: [],
+  }));
+}
+
 function asClientIncome(now: Date): IncomeSource[] {
   return buildDemoDataset(USER, now).income.map((i, n) => ({
     _id: `inc${n}`,
@@ -86,10 +103,12 @@ describe.each(DATES)("demo dataset on %s", (now) => {
   const month = currentMonthKey(now);
   const bills = asClientBills(now);
   const monthBills = scopeBillsToMonth(bills, month, now).bills;
+  const goals = asClientGoals(now);
   const flow = computeCashFlow(
     incomeOccurrencesForMonth(asClientIncome(now), month),
     monthBills,
     DEFAULT_CATEGORIES,
+    totalGoalReserve(goals, month),
   );
 
   it("starts from ₹1,00,000 counted income", () => {
@@ -101,6 +120,21 @@ describe.each(DATES)("demo dataset on %s", (now) => {
     expect((flow.bills + flow.saved) / flow.income).toBeGreaterThanOrEqual(0.5);
     expect(flow.free).toBeGreaterThan(0);
     expect(flow.saved).toBe(15000);
+    // Goal set-asides come out of what is free, and the plan still balances.
+    expect(flow.goals).toBe(15250);
+    expect(flow.free).toBe(flow.income - flow.bills - flow.saved - flow.goals);
+  });
+
+  it("has one goal in each state", () => {
+    const states = goals.map((g) => goalProgress(g, month).state);
+    expect(states).toContain("on_track");
+    expect(states).toContain("behind");
+    expect(states).toContain("funded");
+    expect(states).toContain("paused");
+    const school = goals.find((g) => g.name === "School fee fund")!;
+    expect(school.targetAmount).toBe(135000);
+    expect(school.monthlyAmount).toBe(11250);
+    expect(school.savedAmount).toBe(22500);
   });
 
   it("includes rent of ₹20,000 and an EMI", () => {
@@ -186,7 +220,7 @@ describe.each(DATES)("demo dataset on %s", (now) => {
     const next = shiftMonth(month, 1);
     const nextBills = scopeBillsToMonth(bills, next, now).bills;
     expect(nextBills.length).toBeGreaterThan(5);
-    expect(nextBills.some((b) => b.name.startsWith("School fee"))).toBe(true);
+    expect(nextBills.some((b) => b.name === "Rent")).toBe(true);
   });
 });
 
@@ -205,6 +239,7 @@ describe("demo documents pass the real Mongoose validation", () => {
     await check(InstallmentPlan, data.plans);
     await check(IncomeModel, data.income);
     await check(Budget, data.budgets);
+    await check(GoalModel, data.goals);
     await check(BudgetSettings, [data.settings]);
   });
 });

@@ -21,12 +21,13 @@ For Rajiv. This page records the state at Iteration 5 (the verification figures 
 | Month-scoped dashboard | Monthly Flow, stats and Upcoming follow the selected month; recurring bills for months not yet generated are projected in the browser. | `src/lib/billMonth.ts`, `useBillStore`, `useMonthBills` |
 | Stale-deploy handling | A blank page after a release (old tab, new chunks) now triggers one automatic reload, or a reload screen. | `src/lib/chunkReload.ts`, `ChunkErrorBoundary` |
 | Budgeting (Phase 1) | Income sources, a Cash Flow card, per-category monthly limits, an optional needs/wants/savings split, and an EMI-share warning. All configurable per user; category type (Need/Want/Savings) is set by admins. | `IncomeSource`, `Budget`, `BudgetSettings` models; `/api/income`, `/api/budgets`, `/api/budget-settings`; Budget tab |
+| Goals and Log a spend (Phase 2) | A **Goals** tab under Budget: a target amount and date, a monthly set-aside worked out for you, an in-plan switch, and a ledger of money added. The monthly amount is taken out of Free to spend. A floating **Log a spend** button on every signed-in page records an everyday expense as a paid bill. The demo now includes four goals. | `Goal` model, `/api/goals`, `GoalsTab`, `QuickSpend`, `src/lib/goals.ts` |
 | Demo account | One-click "Try the demo" signs visitors into a shared Clerk user holding generated sample data (₹1,00,000 income, 20,000 rent, about 63% of income going to bills and savings). Reset by banner button, Admin card, `npm run seed:demo`, and automatically after 24 hours. | `demoService.ts`, `/api/demo/*`, `DemoBanner`, [DEMO.md](DEMO.md) |
 | Docs | API, architecture, design, testing, deployment, mocked-vs-real and this page updated; new [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md). | `docs/` |
 
 Test counts in the next section are Iteration 5 figures and are now out of date; run the commands in [TESTING.md](TESTING.md) for current numbers. On a Node 22 machine five currency formatting tests fail (`₹1.0Cr` vs `₹1Cr`); the project targets Node 24.
 
-Deferred to a later phase: savings goals (for example a school-fee fund), a quick "log a spend" entry, household sharing, a configurable month start day, budget rollover, alert toggles, and per-user category type overrides.
+Deferred to a later phase: household sharing, a configurable month start day, budget rollover, alert toggles, and per-user category type overrides.
 
 ## Verified in Iteration 5
 
@@ -90,6 +91,8 @@ Use a Clerk development instance with two test users: one listed in `ADMIN_CLERK
 13. **Categories** (admin): Admin → Categories; add "Pet care" as a Want, hide it, and confirm it disappears from the Add Bill dropdown but old bills keep their label.
 14. **Income and cash flow**: Budget → Income, add a monthly salary; the dashboard Cash Flow card shows free-to-spend; switch months and confirm recurring bills are included. Mark this month's income received.
 15. **Budgets**: Budget → Budgets, set a limit on one category below its spend and check it turns red with "over by"; Budget → Settings, switch to the needs/wants/savings split and save.
+16. **Goals**: Budget → Goals, add a goal of ₹1,35,000 due in about four months and check it suggests ₹33,750 a month; add money; go to the dashboard and confirm Free to spend dropped by the monthly amount and the Cash Flow card shows a Goals figure. Switch **In plan** off and confirm it returns.
+17. **Log a spend**: tap the round button at the bottom right of any page, log ₹450 with a note, and confirm it appears in the bills list as paid and counts against its category budget.
 
 ## Demo account checklist
 
@@ -119,7 +122,8 @@ Atlas (network access, performance), real Clerk sign-in and token verification, 
 - Reminders are in-app only (no email or push); there is no background scheduler.
 - Deleting a bill keeps its payment and note records.
 - Income and budget amounts are stored without currency conversion and assume rupees.
-- Budget "spent" is the total of bills in a category for the month (bills are the only expense record); there is no separate spending ledger yet.
+- Budget "spent" is the total of bills in a category for the month. A spend logged with Log a spend is stored as a paid one-time bill, so there is no separate expense list; it appears in the bills list.
+- A goal's monthly set-aside is planned, not tracked: Add money only records progress, and the 50/30/20 savings summary does not include goals.
 - The "Savings & investments" default category exists only on a fresh database; add it by hand on an existing one.
 - Category type (Need/Want/Savings) is global, set by admins, not per user.
 - Clerk profile changes (email, name) can take up to 15 minutes to appear.

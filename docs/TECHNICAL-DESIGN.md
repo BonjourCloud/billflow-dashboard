@@ -422,6 +422,8 @@ This map answers "where in the code is this feature, and what would fail if it b
 | Admin manages categories | `Category` model, `categoryService.ts`, `AdminCategories.tsx` | unique name, hide not delete when used, ≥1 active, kind | `categories-backend`, `integration/categories` |
 | Income and "free to spend" | `IncomeSource`, `cashFlow.ts`, `CashFlowCard.tsx` | month-end clamp, end dates, count-in-plan, savings kind | `budget-cashflow`, `integration/budget` |
 | Category limits and split | `Budget`, `BudgetSettings`, `BudgetsTab.tsx` | limit > 0, 80% warn, split sums to 100 | `budget-cashflow`, `integration/budget` |
+| Savings goals | `Goal`, `goals.ts`, `GoalsTab.tsx`, `CashFlowCard.tsx` | months inclusive, round up, reserve capped at what is missing, pace in completed months | `goals.test`, `integration/goals`, full-stack goal journey |
+| Log a spend | `QuickSpend.tsx`, `POST /api/bills` | amount > 0, paid one-time bill dated on the day | `integration/goals` (spend test), full-stack spend journey |
 | Branding, theme, pricing | `SiteSettings`, `PricingTier`, admin pages | HSL validation, https logo, hidden tiers admin-only | `pricing-backend`, `theme`, `public-endpoints`, `logo-upload` |
 | Safe configuration | `config/env.ts`, `vite.config.ts` | refuse to start/build when invalid | `env-config`, `deploy-readiness` |
 | Survive new deployments | `chunkReload.ts`, `ChunkErrorBoundary` | one reload, no loop | `chunk-reload.test.ts` |
@@ -455,6 +457,7 @@ flowchart LR
         cat[Category]
         inc[IncomeSource]
         bud[Budget · BudgetSettings]
+        goal[Goal]
     end
     subgraph services
         rec[recurrenceService]
@@ -587,7 +590,8 @@ Signed-in and admin pages are lazy-loaded, so the landing page does not download
 ### 7.3 State and caching
 
 - Server state lives in TanStack Query. Bills and subscriptions use the keys `['bills']` and `['subscriptions']`; the month-aware hooks reuse them so every screen shares one fetch.
-- Budget data has its own keys (`income`, `budgets`, `budget-settings`), invalidated after each mutation.
+- Budget data has its own keys (`income`, `budgets`, `budget-settings`, `goals`), invalidated after each mutation.
+- **Log a spend** (`QuickSpend.tsx`) is a floating button rendered by the shared header on every signed-in page. It posts a one-time bill with status `paid` dated on the chosen day to `POST /api/bills`, then invalidates the bill keys, so budgets and Cash Flow include it with no new endpoint.
 - Categories are fetched once and cached; `useCategories` exposes `optionsFor(current)` (active categories plus the bill's own, possibly hidden, category), `getLabel` and `getColor`.
 - Notifications poll every 60 s.
 - Light/dark preference is the only data kept in `localStorage`.
@@ -616,6 +620,7 @@ erDiagram
     USER ||--o{ RECURRING_SERIES : owns
     USER ||--o{ INCOME_SOURCE : owns
     USER ||--o{ BUDGET : owns
+    USER ||--o{ GOAL : owns
     USER ||--|| BUDGET_SETTINGS : has
     RECURRING_SERIES ||--o{ BILL : generates
     INSTALLMENT_PLAN ||--o{ BILL : "schedule of"
@@ -697,6 +702,15 @@ erDiagram
         string category "slug, unique per user"
         number limit
     }
+    GOAL {
+        string name
+        number targetAmount
+        date targetDate
+        date startDate "first of the month, UTC"
+        number monthlyAmount "planned set-aside"
+        bool isActive
+        object[] contributions "amount, date, note (max 500)"
+    }
     BUDGET_SETTINGS {
         string method "limits | 50-30-20"
         number needsPct
@@ -725,6 +739,7 @@ Global (not per-user) collections: `Category`, `PricingTier`, `SiteSettings` (si
 | `incomesources` | `userId` | Amount > 0, name ≤ 100, `receivedCycles` of `YYYY-MM` |
 | `budgets` | unique `{userId, category}` | `limit` > 0, ≤ 1,000,000,000 |
 | `budgetsettings` | unique `userId` | Created on first save; GET returns defaults when absent |
+| `goals` | `userId` | Savings goals with an embedded `contributions` ledger (at most 500, capped atomically); target and monthly amounts > 0 and ≤ 1,000,000,000; deleting a goal deletes its ledger |
 
 ### 8.3 Referential integrity
 
@@ -742,6 +757,7 @@ MongoDB has no foreign keys, so integrity is enforced in code:
 | Income occurrences for any month | Fully determined by the source's day, start and end dates; nothing to generate, expire or repair |
 | Bills for months beyond next month | Projected from active series on demand; avoids creating rows for months that may never matter |
 | Spent, free-to-spend, savings rate, EMI share, budget usage | Pure functions of bills, income, settings and the selected month |
+| Goal saved amount, progress, pace, and the set-aside reserved in a month | Pure functions of the goal and its contribution ledger |
 
 Only *facts the user declared* are stored: sources, receipts, limits, settings.
 
@@ -822,12 +838,29 @@ For the month's bills:
 | `received` | Sum of occurrences marked received |
 | `saved` | Sum of bills whose category `kind` is `savings` |
 | `bills` | Sum of all other bills |
-| `free` | `income − bills − saved` (may be negative) |
+| `goals` | Planned set-aside for savings goals in the month (section 9.6a) |
+| `free` | `income − bills − saved − goals` (may be negative) |
 | `savingsRate` | `saved / income` (0 if no income) |
 | `billsShare` | `bills / income` (null if no income) |
 | `emiRatio` | Sum of EMI bills `/ income` (null if no income) |
 
 An **EMI bill** is one with a `planId` or in the `loans` category. The EMI pill turns to a warning when `emiRatio` exceeds the user's `emiRatioWarnPct` (default 40%).
+
+### 9.6a Savings goals (`src/lib/goals.ts`, `server/src/models/Goal.ts`)
+
+A goal is a target amount to reach by a target date, for example a school-fee fund of ₹1,35,000. The user sets aside a **fixed monthly amount** until the target month.
+
+| Rule | Definition |
+|---|---|
+| Months available | Calendar months from the start month to the target month, **both included**, at least 1. Start is the first of the month the goal was created in (UTC). |
+| Suggested monthly amount | `ceil(target / months)`: rounded **up** to a whole rupee so the plan never falls short. ₹1,35,000 over four months is ₹33,750. The server uses the same rule when no monthly amount is sent. |
+| Reserve in a month | The monthly amount when the month is between the start and target months, the goal is **active** and not funded; never more than what is still missing. Otherwise 0. The sum over goals is the `goals` figure in Cash Flow and is taken out of free money. |
+| Saved so far | Sum of the contribution ledger. Contributions track progress only; they **do not** change Cash Flow, because the plan has already reserved the money. |
+| Pace | Expected by now is the monthly amount times the months already completed (the current month is not counted), capped at the target. A goal is **behind plan** only after a full month has passed without the planned amount. |
+| States | `funded`, `paused` (not in plan), `overdue` (target month passed), `upcoming`, `behind`, `on_track` |
+| Re-planning | Changing the target amount or date without a new monthly amount recomputes it; renaming or pausing keeps a custom monthly amount. |
+
+The browser and the server both compute months and the suggested amount; a unit test checks that they agree on a range of dates.
 
 ### 9.7 Budget rows and kind summaries
 
@@ -1026,7 +1059,7 @@ The full endpoint list with request and response shapes is in [API.md](API.md). 
 | Installments | `/api/installments[...]` |
 | Notifications | `/api/notifications[...]` |
 | Categories | `/api/categories`, `/api/admin/categories[...]` |
-| Budgeting | `/api/income[...]`, `/api/budgets[...]`, `/api/budget-settings` |
+| Budgeting | `/api/income[...]`, `/api/budgets[...]`, `/api/budget-settings`, `/api/goals[...]` |
 | Demo | `GET /api/demo/status`, `POST /api/demo/session`, `POST /api/demo/reset` |
 | Site | `/api/site-settings`, `/api/pricing-tiers`, `/api/admin/*` |
 
@@ -1296,7 +1329,8 @@ New routes are covered automatically by the boundary and validation sweeps, so a
 
 ### 18.1 Known limitations
 
-- No expense ledger: budgets reflect bills only.
+- Everyday spends are logged as paid one-time bills; there is no separate expense ledger, so they appear in the bills list.
+- A goal's monthly set-aside is planned, not tracked: contributions measure progress only, and the 50/30/20 savings summary does not include goals.
 - No household or shared accounts; one owner per record.
 - Currency is assumed to be rupees; no multi-currency.
 - Reminders are in-app only; no background jobs.
@@ -1320,8 +1354,7 @@ New routes are covered automatically by the boundary and validation sweeps, so a
 
 ### 18.3 Roadmap (budgeting Phase 2 and beyond)
 
-1. Quick "Log a spend" (an expense ledger) so budgets reflect everyday spending.
-2. Savings **goals** with monthly set-aside (for example a school-fee fund of ₹1,35,000 three times a year ≈ ₹33,750 per month), feeding the Cash Flow "set aside" figure.
+1. *(Done in Phase 2)* Quick "Log a spend" and savings goals with a monthly set-aside in Cash Flow.
 3. Household sharing (shared bills and budgets).
 4. Configurable month start day (for example salary-day based months), budget rollover, alert toggles, per-user category type overrides.
 5. Operational hardening: error tracking, alerts, backups, CSP, shared rate-limit store.
@@ -1519,6 +1552,8 @@ Legend. **Auth**: `public` no token; `user` signed-in user; `admin` admin only. 
 | GET/POST `/api/income`, PATCH/DELETE `/api/income/:id`, PUT `/api/income/:id/received` | user | zod strict; id shape; `cycle` = `YYYY-MM` | Ownership |
 | GET `/api/budgets`, PUT/DELETE `/api/budgets/:slug` | user | slug shape; limit > 0 and ≤ 1e9; category must exist and be active | Per-user unique limit |
 | GET/PUT `/api/budget-settings` | user | zod strict; split must total 100 | One document per user |
+| GET/POST `/api/goals`, PATCH/DELETE `/api/goals/:id` | user | zod strict; id shape; target and amounts > 0 and ≤ 1e9; target month not before the start month and within 50 years | Every query filters by `userId`; other users get 404 |
+| POST `/api/goals/:id/contributions`, DELETE `/api/goals/:id/contributions/:contributionId` | user | zod strict; both ids shape-checked; amount > 0; note ≤ 100 | Filter on goal owner; the 500-entry cap is part of the update filter, so concurrent requests cannot exceed it |
 | any other path | n/a | n/a | JSON 404 |
 
 The authentication, admin and validation columns are enforced for *every* route by the sweeps in `integration/auth-boundaries.test.ts` and `integration/request-validation.test.ts`; the matrix above was compiled from the route list in `server/src/index.ts`.

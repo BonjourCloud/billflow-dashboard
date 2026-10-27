@@ -27,6 +27,7 @@ const AdminCategories = lazy(() => import("./pages/admin/AdminCategories"));
 const BudgetLayout = lazy(() => import("./pages/budget/BudgetLayout"));
 const IncomeTab = lazy(() => import("./pages/budget/IncomeTab"));
 const BudgetsTab = lazy(() => import("./pages/budget/BudgetsTab"));
+const GoalsTab = lazy(() => import("./pages/budget/GoalsTab"));
 const BudgetSettingsTab = lazy(() => import("./pages/budget/BudgetSettingsTab"));
 const AdminBranding = lazy(() => import("./pages/admin/AdminBranding"));
 const AdminTheme = lazy(() => import("./pages/admin/AdminTheme"));
@@ -61,6 +62,7 @@ const App = () => (
                   <Route index element={<Navigate to="income" replace />} />
                   <Route path="income" element={<IncomeTab />} />
                   <Route path="budgets" element={<BudgetsTab />} />
+                  <Route path="goals" element={<GoalsTab />} />
                   <Route path="settings" element={<BudgetSettingsTab />} />
                 </Route>
                 <Route path="/bill/:id" element={<ProtectedRoute><BillDetail /></ProtectedRoute>} />

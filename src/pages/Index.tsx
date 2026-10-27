@@ -9,6 +9,7 @@ import { BillTable } from '@/components/dashboard/BillTable';
 import { BillDialog } from '@/components/dashboard/BillDialog';
 import { CashFlowCard } from '@/components/dashboard/CashFlowCard';
 import { useIncome, useBudgetSettings } from '@/hooks/useBudget';
+import { useGoals } from '@/hooks/useGoals';
 import { SpendingChartWidget } from '@/components/dashboard/SpendingChartWidget';
 import { Button } from '@/components/ui/button';
 import { Bill, BillCategory } from '@/data/bills';
@@ -17,6 +18,7 @@ const Index = () => {
   const store = useBillStore();
   const { sources } = useIncome();
   const { settings: budgetSettings } = useBudgetSettings();
+  const { goals } = useGoals();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
@@ -69,6 +71,7 @@ const Index = () => {
           <UpcomingBillsWidget bills={store.upcomingBills} />
           <CashFlowCard
             sources={sources}
+            goals={goals}
             bills={store.monthBills}
             selectedMonth={store.selectedMonth}
             monthLabel={store.month.monthLabel}

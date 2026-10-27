@@ -4,13 +4,17 @@ import { Link } from 'react-router-dom';
 import { Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Bill } from '@/data/bills';
 import type { IncomeSource } from '@/data/budget';
+import type { Goal } from '@/data/goals';
 import { MonthKey } from '@/lib/billMonth';
 import { computeCashFlow, incomeOccurrencesForMonth } from '@/lib/cashFlow';
 import { formatCurrency } from '@/lib/currency';
+import { totalGoalReserve } from '@/lib/goals';
 import { useCategories } from '@/hooks/useCategories';
 
 interface CashFlowCardProps {
   sources: IncomeSource[];
+  /** Savings goals; their planned set-aside is taken out of free money. */
+  goals?: Goal[];
   /** Bills making up the selected month (including expected recurring ones). */
   bills: Bill[];
   selectedMonth: MonthKey;
@@ -20,12 +24,18 @@ interface CashFlowCardProps {
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
-export function CashFlowCard({ sources, bills, selectedMonth, monthLabel, emiWarnPct }: CashFlowCardProps) {
+export function CashFlowCard({ sources, goals = [], bills, selectedMonth, monthLabel, emiWarnPct }: CashFlowCardProps) {
   const { categories } = useCategories();
 
   const flow = useMemo(
-    () => computeCashFlow(incomeOccurrencesForMonth(sources, selectedMonth), bills, categories),
-    [sources, bills, selectedMonth, categories],
+    () =>
+      computeCashFlow(
+        incomeOccurrencesForMonth(sources, selectedMonth),
+        bills,
+        categories,
+        totalGoalReserve(goals, selectedMonth),
+      ),
+    [sources, goals, bills, selectedMonth, categories],
   );
 
   if (sources.length === 0) {
@@ -58,9 +68,10 @@ export function CashFlowCard({ sources, bills, selectedMonth, monthLabel, emiWar
   }
 
   const shortfall = flow.free < 0;
-  const scale = Math.max(flow.income, flow.bills + flow.saved, 1);
+  const scale = Math.max(flow.income, flow.bills + flow.saved + flow.goals, 1);
   const billsW = (flow.bills / scale) * 100;
   const savedW = (flow.saved / scale) * 100;
+  const goalsW = (flow.goals / scale) * 100;
   const freeW = shortfall ? 0 : (flow.free / scale) * 100;
   const emiOver = flow.emiRatio !== null && flow.emiRatio * 100 > emiWarnPct;
 
@@ -88,7 +99,7 @@ export function CashFlowCard({ sources, bills, selectedMonth, monthLabel, emiWar
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           {flow.income > 0
-            ? 'Expected income minus bills, EMIs and savings.'
+            ? 'Expected income minus bills, EMIs, savings and goals.'
             : 'No income is expected this month.'}
         </p>
       </div>
@@ -97,20 +108,24 @@ export function CashFlowCard({ sources, bills, selectedMonth, monthLabel, emiWar
         <div
           className="flex h-3 rounded-full overflow-hidden bg-secondary"
           role="img"
-          aria-label={`Of ${formatCurrency(scale)}: bills ${formatCurrency(flow.bills)}, saved ${formatCurrency(flow.saved)}, free ${formatCurrency(Math.max(flow.free, 0))}`}
+          aria-label={`Of ${formatCurrency(scale)}: bills ${formatCurrency(flow.bills)}, saved ${formatCurrency(flow.saved)}, goals ${formatCurrency(flow.goals)}, free ${formatCurrency(Math.max(flow.free, 0))}`}
         >
           <div className="bg-amber-500" style={{ width: `${billsW}%` }} />
           <div className="bg-cyan-500" style={{ width: `${savedW}%` }} />
+          <div className="bg-violet-500" style={{ width: `${goalsW}%` }} />
           <div className="bg-primary" style={{ width: `${freeW}%` }} />
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />Bills &amp; EMIs</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-cyan-500" />Saved</span>
+          {flow.goals > 0 && (
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500" />Goals</span>
+          )}
           <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-primary" />Free</span>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`mt-5 grid grid-cols-1 gap-3 ${flow.goals > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
         <Chip label="Income" value={formatCurrency(flow.income)} note={`${formatCurrency(flow.received)} received`} />
         <Chip
           label="Bills & EMIs"
@@ -118,6 +133,9 @@ export function CashFlowCard({ sources, bills, selectedMonth, monthLabel, emiWar
           note={flow.billsShare === null ? `${flow.billCount} bills` : `${pct(flow.billsShare)} of income`}
         />
         <Chip label="Saved" value={formatCurrency(flow.saved)} note={`${pct(flow.savingsRate)} savings rate`} />
+        {flow.goals > 0 && (
+          <Chip label="Goals" value={formatCurrency(flow.goals)} note="Set aside for your goals" />
+        )}
       </div>
 
       {flow.emiRatio !== null && (

@@ -112,6 +112,19 @@ import {
   isValidIncomeId,
 } from "./models/IncomeSource.js";
 import {
+  Goal,
+  MAX_CONTRIBUTIONS,
+  MAX_GOAL_MONTHS,
+  createContributionSchema,
+  createGoalSchema,
+  defaultMonthlyAmount,
+  goalMonths,
+  isValidGoalId,
+  savedAmountOf,
+  startOfMonthUtc,
+  updateGoalSchema,
+} from "./models/Goal.js";
+import {
   Budget,
   BudgetSettings,
   DEFAULT_BUDGET_SETTINGS,
@@ -1015,6 +1028,273 @@ app.put("/api/budget-settings", async (req, res) => {
   } catch (error) {
     console.error("Failed to save budget settings:", error);
     return res.status(500).json({ error: "Failed to save budget settings." });
+  }
+});
+
+// ───────────────────────── Savings goals ─────────────────────────
+
+interface GoalLean {
+  _id: unknown;
+  name: string;
+  targetAmount: number;
+  targetDate: Date;
+  startDate: Date;
+  monthlyAmount: number;
+  isActive?: boolean;
+  contributions?: Array<{
+    _id: unknown;
+    amount: number;
+    date: Date;
+    note?: string | null;
+  }>;
+}
+
+function toGoalDto(goal: GoalLean) {
+  const contributions = [...(goal.contributions ?? [])]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .map((c) => ({
+      _id: String(c._id),
+      amount: c.amount,
+      date: c.date.toISOString(),
+      note: c.note ?? null,
+    }));
+  return {
+    _id: String(goal._id),
+    name: goal.name,
+    targetAmount: goal.targetAmount,
+    targetDate: goal.targetDate.toISOString(),
+    startDate: goal.startDate.toISOString(),
+    monthlyAmount: goal.monthlyAmount,
+    isActive: goal.isActive !== false,
+    savedAmount: savedAmountOf(goal),
+    contributions,
+  };
+}
+
+app.get("/api/goals", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    const goals = await Goal.find({ userId }).sort({ createdAt: 1 }).lean();
+    return res.status(200).json(goals.map(toGoalDto));
+  } catch (error) {
+    console.error("Failed to list goals:", error);
+    return res.status(500).json({ error: "Failed to list goals." });
+  }
+});
+
+app.post("/api/goals", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = createGoalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid goal data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const startDate = startOfMonthUtc(parsed.data.startDate ?? new Date());
+    const { targetDate } = parsed.data;
+    if (startOfMonthUtc(targetDate).getTime() < startDate.getTime()) {
+      return res
+        .status(400)
+        .json({ error: "The target date cannot be before the start month." });
+    }
+    if (goalMonths(startDate, targetDate) > MAX_GOAL_MONTHS) {
+      return res
+        .status(400)
+        .json({ error: "The target date is too far away." });
+    }
+
+    const created = await Goal.create({
+      userId,
+      name: parsed.data.name,
+      targetAmount: parsed.data.targetAmount,
+      targetDate,
+      startDate,
+      monthlyAmount:
+        parsed.data.monthlyAmount ??
+        defaultMonthlyAmount(parsed.data.targetAmount, startDate, targetDate),
+    });
+
+    return res.status(201).json(toGoalDto(created.toObject()));
+  } catch (error) {
+    console.error("Failed to create goal:", error);
+    return res.status(500).json({ error: "Failed to create goal." });
+  }
+});
+
+app.patch("/api/goals/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidGoalId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid goal ID format." });
+    }
+
+    const parsed = updateGoalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid goal data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const existing = await Goal.findOne({ _id: req.params.id, userId });
+    if (!existing) {
+      return res.status(404).json({ error: "Goal not found." });
+    }
+
+    const nextTarget = parsed.data.targetDate ?? existing.targetDate;
+    if (startOfMonthUtc(nextTarget).getTime() < existing.startDate.getTime()) {
+      return res
+        .status(400)
+        .json({ error: "The target date cannot be before the start month." });
+    }
+    if (goalMonths(existing.startDate, nextTarget) > MAX_GOAL_MONTHS) {
+      return res
+        .status(400)
+        .json({ error: "The target date is too far away." });
+    }
+
+    Object.assign(existing, parsed.data);
+    // Changing the target or date without a new monthly amount re-plans it.
+    if (
+      parsed.data.monthlyAmount === undefined &&
+      (parsed.data.targetAmount !== undefined ||
+        parsed.data.targetDate !== undefined)
+    ) {
+      existing.monthlyAmount = defaultMonthlyAmount(
+        existing.targetAmount,
+        existing.startDate,
+        existing.targetDate,
+      );
+    }
+    await existing.save();
+
+    return res.status(200).json(toGoalDto(existing.toObject()));
+  } catch (error) {
+    console.error("Failed to update goal:", error);
+    return res.status(500).json({ error: "Failed to update goal." });
+  }
+});
+
+app.delete("/api/goals/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidGoalId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid goal ID format." });
+    }
+
+    const deleted = await Goal.findOneAndDelete({
+      _id: req.params.id,
+      userId,
+    }).lean();
+    if (!deleted) {
+      return res.status(404).json({ error: "Goal not found." });
+    }
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete goal:", error);
+    return res.status(500).json({ error: "Failed to delete goal." });
+  }
+});
+
+app.post("/api/goals/:id/contributions", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidGoalId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid goal ID format." });
+    }
+
+    const parsed = createContributionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid contribution.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    // The size check is part of the filter, so concurrent requests cannot
+    // push a goal past the cap.
+    const updated = await Goal.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId,
+        [`contributions.${MAX_CONTRIBUTIONS - 1}`]: { $exists: false },
+      },
+      {
+        $push: {
+          contributions: {
+            amount: parsed.data.amount,
+            date: parsed.data.date ?? new Date(),
+            note: parsed.data.note || null,
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!updated) {
+      const exists = await Goal.exists({ _id: req.params.id, userId });
+      if (!exists) {
+        return res.status(404).json({ error: "Goal not found." });
+      }
+      return res.status(400).json({
+        error: `A goal can hold at most ${MAX_CONTRIBUTIONS} contributions.`,
+      });
+    }
+    return res.status(201).json(toGoalDto(updated));
+  } catch (error) {
+    console.error("Failed to add contribution:", error);
+    return res.status(500).json({ error: "Failed to add contribution." });
+  }
+});
+
+app.delete("/api/goals/:id/contributions/:contributionId", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (
+      !isValidGoalId(req.params.id) ||
+      !isValidGoalId(req.params.contributionId)
+    ) {
+      return res.status(400).json({ error: "Invalid ID format." });
+    }
+
+    const updated = await Goal.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId,
+        "contributions._id": req.params.contributionId,
+      },
+      { $pull: { contributions: { _id: req.params.contributionId } } },
+      { new: true },
+    ).lean();
+    if (!updated) {
+      return res.status(404).json({ error: "Contribution not found." });
+    }
+    return res.status(200).json(toGoalDto(updated));
+  } catch (error) {
+    console.error("Failed to remove contribution:", error);
+    return res.status(500).json({ error: "Failed to remove contribution." });
   }
 });
 

@@ -4,6 +4,7 @@ import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 const tabs = [
   { to: '/budget/income', label: 'Income' },
   { to: '/budget/budgets', label: 'Budgets' },
+  { to: '/budget/goals', label: 'Goals' },
   { to: '/budget/settings', label: 'Settings' },
 ];
 
