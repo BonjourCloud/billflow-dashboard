@@ -63,6 +63,7 @@ npm run dev                   # web  -> http://localhost:8080
 **Frontend** (root `.env` / `.env.local`; only `VITE_`-prefixed vars reach the browser):
 - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk `pk_test_…` / `pk_live_…`
 - `VITE_API_URL` — API origin. Local falls back to `http://localhost:5001`; prod is `https://api.billwill.site` (or the raw Render URL `https://billflow-api-96to.onrender.com`)
+- `VITE_GA_MEASUREMENT_ID` — optional GA4 id (`G-XXXXXXXXXX`); set in Vercel Production only, enables analytics (see §6e). Build-time: redeploy after changing.
 
 **Backend** (`server/.env` — secrets, never committed):
 - `MONGODB_URI` — Atlas connection string (local uses db `billflow-dev`)
@@ -313,16 +314,42 @@ a demo reset, Free to spend is ~₹6,500/mo (goals reserve ~₹15,250) — expec
 Local run: lint ✅, 480 unit ✅, 233 integration ✅ (the 3 Windows-only
 `deploy-readiness` failures are unrelated).
 
-**e2e harness fix (`ada319b`):** the fullstack webServer crashed in CI because the
-demo-session feature calls `clerkClient.signInTokens.createSignInToken(...)`, and
-the harness stubbed it with a direct assignment — rejected by Clerk's lazy Proxy
-`set` trap (`'set' on proxy: trap returned falsish`). Fixed by attaching the stub
-with `Object.defineProperty(clerkClient, "signInTokens", { configurable: true,
-value: {...} })`. Verified the harness now boots past the failing line locally.
+**e2e harness fixes (two rounds):**
+- `ada319b` — the fullstack webServer *crashed* in CI because the demo-session
+  feature calls `clerkClient.signInTokens.createSignInToken(...)`, and the harness
+  stubbed it with a direct assignment, rejected by Clerk's lazy Proxy `set` trap
+  (`'set' on proxy: trap returned falsish`). First patched with
+  `Object.defineProperty`, which got it to *boot*.
+- `ec2504c` — superseded that. Two real test-code bugs: (1) the sign-in-ticket
+  stub still wasn't read by the app's Clerk client (it hit real Clerk →
+  "Unauthorized"), so it's now patched **in place** on the resolved
+  `clerkClient.signInTokens.createSignInToken` (same pattern as the `users`
+  stub); (2) the "creates a bill" journey typed into the Due Date field, but that
+  is the **calendar popover button** (see §9 / BillDialog), not a text box — a
+  `pickDueDate()` helper now opens the calendar and clicks today. Harness boots
+  clean locally; browser assertions run in CI.
 
 **Phase 2 limitations:** the 50/30/20 summary does not count goal money as
 savings; a logged spend appears in the bills list as a paid bill (no separate
 list); household sharing deferred.
+
+---
+
+## 6e. Google Analytics (commit `1eac57a`)
+
+Opt-in GA4, frontend-only. Full guide in `docs/ANALYTICS.md`.
+
+- **Gated by `VITE_GA_MEASUREMENT_ID`** (a `G-XXXXXXXXXX` id). When unset, no
+  analytics loads — so dev/preview stay clean. Set it only for **Production**.
+- **Build-time var:** baked into the bundle at build, so changing it requires a
+  **frontend redeploy** (not just an env edit). It's set in Vercel → Production.
+- Wiring: `src/lib/analytics.ts` (`initAnalytics` + `trackEvent`), called from
+  `src/main.tsx`; `useDemo.ts` fires a `demo_started` event on demo entry. Tested
+  in `src/test/analytics.test.ts` (5 tests).
+- **Verify:** open billwill.site in a browser with **no ad blocker** →
+  GA → Reports → Realtime (appear within ~1 min). If empty, check DevTools →
+  Network for `gtag/js` or `google-analytics.com/g/collect`; absence means the id
+  wasn't baked in (env var missing at build) → re-set in Vercel and redeploy.
 
 ---
 
@@ -469,8 +496,12 @@ without a token.
   (`e1eeed6`). `?v=2` cache-bust confirmed the WhatsApp preview updates.
 - **Phase 2 (Log a spend + Goals)**: QuickSpend FAB + savings Goals with
   in-plan reservation from Free to spend; demo seeds 4 goals. Pushed (`d5eec0f`),
-  Render redeployed. Fixed a CI-only e2e harness crash (Clerk proxy) in
-  `ada319b`. 19 goals unit + goals integration tests pass.
+  Render redeployed. 19 goals unit + goals integration tests pass. E2e harness
+  fixed in two rounds (`ada319b`, `ec2504c`): in-place Clerk ticket stub +
+  calendar due-date picker in the journey.
+- **Google Analytics (GA4)**: opt-in via `VITE_GA_MEASUREMENT_ID` (Vercel
+  Production), `demo_started` event, `docs/ANALYTICS.md`. Pushed (`1eac57a`);
+  env var set in Vercel + redeployed.
 
 ### Pending / to consider
 - **Verify demo end-to-end** in a private window: Try the demo → banner, Cash
@@ -507,6 +538,9 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+ec2504c  fix(e2e): patch createSignInToken in place and pick due date via calendar popover
+1eac57a  feat: Google Analytics 4 (opt-in via VITE_GA_MEASUREMENT_ID) with demo_started event
+6c315f7  docs: document favicon + Open Graph social-preview setup
 e1eeed6  fix: add og:image and social preview meta tags (WhatsApp/Twitter link preview)
 9578a3a  docs: add Phase 2 (Log a spend + Goals), logo/favicon, and e2e fix to billwill-notes
 ada319b  fix(e2e): define signInTokens stub via Object.defineProperty to bypass Clerk proxy set trap
