@@ -1,4 +1,4 @@
-import { test, expect, type Page, type APIRequestContext, type TestInfo } from "@playwright/test";
+import { test, expect, type Locator, type Page, type APIRequestContext, type TestInfo } from "@playwright/test";
 import { E2E_API } from "../../playwright.fullstack.config";
 
 // Major user journeys against the real API and MongoDB (see api-server.ts).
@@ -8,6 +8,18 @@ const ADMIN = "user_e2e_admin";
 const DAY = 24 * 60 * 60 * 1000;
 const dateInput = (daysFromNow: number) =>
   new Date(Date.now() + daysFromNow * DAY).toISOString().slice(0, 10);
+
+// The bill dialog's Due Date is a calendar popover, not a text input: open it
+// and pick today (always inside the month the calendar opens on).
+async function pickDueDate(page: Page, dialog: Locator) {
+  await dialog.getByLabel("Due Date").click();
+  const today = String(new Date().getDate());
+  await page
+    .locator('button[name="day"]:not(.day-outside)')
+    .getByText(today, { exact: true })
+    .click();
+  await expect(dialog.getByLabel("Due Date")).not.toHaveText("Pick a date");
+}
 
 function uniqueUser(testInfo: TestInfo, label: string): string {
   const suffix = `${testInfo.project.name}_${testInfo.workerIndex}_${Date.now().toString(36)}`;
@@ -85,7 +97,7 @@ test("creates a bill and records a payment", async ({ page }, testInfo) => {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Bill Name").fill("Broadband");
   await dialog.getByLabel("Amount (₹)").fill("1499");
-  await dialog.getByLabel("Due Date").fill(dateInput(10));
+  await pickDueDate(page, dialog);
   await dialog.getByRole("button", { name: "Add Bill" }).click();
   await expect(dialog).toBeHidden();
 
