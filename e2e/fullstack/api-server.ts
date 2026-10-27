@@ -59,9 +59,14 @@ users.getUserList = async ({ limit = 100, offset = 0 }: { limit?: number; offset
 };
 
 // Demo sign-in ticket: the fake frontend SDK turns `e2e:<userId>` into a session.
-(clerkClient as unknown as { signInTokens: unknown }).signInTokens = {
-  createSignInToken: async ({ userId }: { userId: string }) => ({ token: `e2e:${userId}` }),
-};
+// clerkClient is a lazy Proxy whose `set` trap rejects brand-new properties, so
+// define the stub with Object.defineProperty instead of a plain assignment.
+Object.defineProperty(clerkClient, "signInTokens", {
+  configurable: true,
+  value: {
+    createSignInToken: async ({ userId }: { userId: string }) => ({ token: `e2e:${userId}` }),
+  },
+});
 
 const clerkAuthBrand = Symbol.for("@clerk/express.auth");
 const outer = express();
