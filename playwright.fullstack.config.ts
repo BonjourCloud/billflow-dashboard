@@ -14,7 +14,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
-  use: { baseURL: WEB, trace: "retain-on-failure" },
+  // actionTimeout makes a stuck click fail on its own line with a call log,
+  // instead of as a bare 30s test timeout.
+  use: { baseURL: WEB, trace: "retain-on-failure", actionTimeout: 10_000 },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     {

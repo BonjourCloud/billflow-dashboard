@@ -101,7 +101,9 @@ test("creates a bill and records a payment", async ({ page }, testInfo) => {
   await dialog.getByRole("button", { name: "Add Bill" }).click();
   await expect(dialog).toBeHidden();
 
-  const row = page.getByText("Broadband").first();
+  // Scope to the table: the "bill added" toast also contains the bill name and
+  // disappears, which would leave a click waiting on a detached element.
+  const row = page.getByRole("row").getByText("Broadband", { exact: true });
   await expect(row).toBeVisible();
   await expect(page.getByText("₹1,499.00").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "dashboard with a bill");
@@ -259,9 +261,9 @@ test("opens the demo account with one click and shows sample data", async ({ pag
 
   await page.getByRole("link", { name: "Goals" }).click();
   await expect(page).toHaveURL(/\/budget\/goals$/);
-  await expect(page.getByText("School fee fund")).toBeVisible();
-  await expect(page.getByText("Goa trip")).toBeVisible();
-  await expect(page.getByText("Behind plan")).toBeVisible();
+  await expect(page.getByText("School fee fund").first()).toBeVisible();
+  await expect(page.getByText("Goa trip").first()).toBeVisible();
+  await expect(page.getByText("Behind plan", { exact: true })).toBeVisible();
   await expect(page.getByText("Funded", { exact: true })).toBeVisible();
   await expect(page.getByText("Paused", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "demo goals");
