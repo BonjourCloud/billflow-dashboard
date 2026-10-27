@@ -46,3 +46,12 @@ Dark mode is the default; a light theme exists via the same token set (class-bas
 - shadcn/ui primitives (`Button`, `Input`, `Select`, `Dialog`, `Calendar`, …) composed into dashboard widgets.
 - One widget per file under `src/components/dashboard/`; props down, callbacks up (DRY, no prop drilling beyond one level).
 - Status badges rendered via a single `statusBadge()` helper keyed off `BillStatus`.
+
+## Budget screens
+
+- **Navigation**: a top-level `Budget` tab in `DashboardHeader`, with underlined sub-tabs Income, Budgets and Settings (`BudgetLayout`). The Cash Flow card sits on the Bills dashboard below Upcoming.
+- **Month switcher** (`MonthSwitcher`): previous / next arrows, the month label, and a "Today" shortcut. The same control drives the dashboard, Income and Budgets.
+- **Cash Flow card**: free-to-spend as the large `font-mono-data` figure, a stacked bar (bills, saved, free), Income / Bills / Saved chips, and an EMI-share pill that turns to a warning above the configured threshold. With no income it shows a single "Add income" prompt.
+- **Budget status**: progress bars use `primary` while under 80% of the limit, amber from 80%, and `destructive` when over. Categories without a limit show a neutral bar. Text always states the amount (and "over by …"), so color is never the only signal.
+- **Kinds**: Need / Want / Savings appear as small neutral badges on category rows and as blue / purple / cyan bars in the needs-wants-savings summary.
+- **Forms**: dialogs with native date inputs and a "Count in my plan" switch; limits are edited inline and saved on blur or Enter.

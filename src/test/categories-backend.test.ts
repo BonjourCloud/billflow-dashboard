@@ -77,6 +77,16 @@ describe("default categories", () => {
     expect(UI_DEFAULTS.map((c) => [c.slug, c.label, c.color])).toEqual(
       DEFAULT_CATEGORIES.map((c) => [c.slug, c.label, c.color]),
     );
+    expect(UI_DEFAULTS.map((c) => [c.slug, c.kind])).toEqual(
+      DEFAULT_CATEGORIES.map((c) => [c.slug, c.kind]),
+    );
+  });
+
+  it("classify leisure as wants and savings as savings", () => {
+    const kind = (slug: string) => DEFAULT_CATEGORIES.find((c) => c.slug === slug)?.kind;
+    expect(kind("entertainment")).toBe("want");
+    expect(kind("savings")).toBe("savings");
+    expect(kind("housing")).toBe("need");
   });
 
   it("prettifies unknown slugs for display", () => {

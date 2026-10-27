@@ -33,7 +33,8 @@ export function UpcomingBillsWidget({ bills }: UpcomingBillsWidgetProps) {
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2, delay: 0.15 + i * 0.05 }}
-              onClick={() => navigate(`/bill/${bill._id}`)}
+              // Expected recurring bills are not in the database yet, so they have no detail page.
+              onClick={() => navigate(bill._id.startsWith('projected:') ? '/subscriptions' : `/bill/${bill._id}`)}
               className="flex items-center justify-between p-3 rounded-2xl bg-secondary/50 hover:bg-secondary/70 transition-colors cursor-pointer group"
             >
               <div className="min-w-0 pr-2">

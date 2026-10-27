@@ -11,10 +11,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/api';
 import { useCategories } from '@/hooks/useCategories';
-import { Category, FALLBACK_COLOR } from '@/data/categories';
+import { Category, CategoryKind, FALLBACK_COLOR, KIND_LABELS } from '@/data/categories';
 
 const categorySchema = z.object({
   label: z
@@ -23,6 +24,7 @@ const categorySchema = z.object({
     .min(1, 'Category name is required.')
     .max(30, 'Category name must not exceed 30 characters.'),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Pick a valid color.'),
+  kind: z.enum(['need', 'want', 'savings']),
 });
 
 export default function AdminCategories() {
@@ -31,6 +33,7 @@ export default function AdminCategories() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [label, setLabel] = useState('');
   const [color, setColor] = useState(FALLBACK_COLOR);
+  const [kind, setKind] = useState<CategoryKind>('need');
   const [saving, setSaving] = useState(false);
 
   const isPersisted = (c: Category) => !c.id.startsWith('default-');
@@ -39,6 +42,7 @@ export default function AdminCategories() {
     setEditing(null);
     setLabel('');
     setColor(FALLBACK_COLOR);
+    setKind('need');
     setOpen(true);
   };
 
@@ -46,11 +50,12 @@ export default function AdminCategories() {
     setEditing(c);
     setLabel(c.label);
     setColor(c.color);
+    setKind(c.kind);
     setOpen(true);
   };
 
   const save = async () => {
-    const parsed = categorySchema.safeParse({ label, color });
+    const parsed = categorySchema.safeParse({ label, color, kind });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message || 'Invalid category.');
       return;
@@ -136,6 +141,7 @@ export default function AdminCategories() {
                 />
                 <h3 className="font-semibold truncate">{c.label}</h3>
                 <code className="text-xs text-muted-foreground font-mono-data">{c.slug}</code>
+                <span className="text-xs bg-secondary px-2 py-0.5 rounded-full">{KIND_LABELS[c.kind]}</span>
                 {!c.is_active && (
                   <span className="text-xs bg-muted px-2 py-0.5 rounded-full">Hidden</span>
                 )}
@@ -198,6 +204,17 @@ export default function AdminCategories() {
                 />
                 <code className="text-xs text-muted-foreground font-mono-data">{color}</code>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-kind">Budget type</Label>
+              <Select value={kind} onValueChange={(v) => setKind(v as CategoryKind)}>
+                <SelectTrigger id="category-kind"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="need">Need</SelectItem>
+                  <SelectItem value="want">Want</SelectItem>
+                  <SelectItem value="savings">Savings</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

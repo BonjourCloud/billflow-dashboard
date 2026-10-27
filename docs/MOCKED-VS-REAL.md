@@ -22,6 +22,8 @@ The app no longer uses mock data: every screen reads and writes through the Expr
 | Dashboard insights ("Smart Insights" widget) | Rule-based calculations in `src/lib/insights.ts`, run in the browser. No AI or LLM service is called. |
 | Reminders | In-app notifications created when the user loads notifications. No email, SMS, or push. |
 | Recurring bills | Created when the user lists bills, subscriptions, or notifications. There is no background scheduler. |
+| Budget and cash-flow figures | Free to spend, savings rate, EMI share, budget progress and the needs/wants/savings split are computed in the browser (`src/lib/cashFlow.ts`) from real bills, income and settings. Only the inputs (income sources, limits, settings, categories) are stored. |
+| Future months | Income and recurring bills for months beyond next month are projected in the browser and never stored. |
 | Theme preference | Light/dark choice stored in the browser's `localStorage`; brand colors come from site settings in MongoDB. |
 
 ## Not yet verified against real services
@@ -39,3 +41,5 @@ See [DEPLOYMENT.md](DEPLOYMENT.md#post-deploy-checklist-manual) for the manual c
 ## History
 
 Earlier versions were a frontend-only prototype with hardcoded mock data, and later planned to use Supabase for auth and storage. Both were replaced: the Supabase client was removed in `c970756`, and the unused Supabase SQL migrations (`db/`) were removed in Iteration 4. Authentication now uses Clerk and data lives in MongoDB.
+
+The budgeting features (income, budgets, budget settings, categories) add no new external services. They are covered by the same unit and integration suites; the API routes were written but, at the time of writing, their integration tests had not yet been run against MongoDB.

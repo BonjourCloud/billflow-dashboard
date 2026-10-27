@@ -1,6 +1,6 @@
-# BillWill — Technical Handover (Iteration 5)
+# BillWill — Technical Handover
 
-For Rajiv. This page summarizes what was verified in Iteration 5, how to run and demonstrate the app, and what remains open. Details live in the linked docs.
+For Rajiv. This page records the state at Iteration 5 (the verification figures below), then what changed afterwards (October 2026: admin-managed categories, month-scoped views, stale-deploy handling, and budgeting), how to run and demonstrate the app, and what remains open. Details live in the linked docs; the full design is in [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md).
 
 ## Status at a glance
 
@@ -9,8 +9,23 @@ For Rajiv. This page summarizes what was verified in Iteration 5, how to run and
 | Features (bills, payments, recurring bills, subscriptions, installments, reminders, pricing, admin) | Implemented and verified by automated tests against the real API and MongoDB |
 | Authentication and authorization | Verified with tests; real Clerk sign-in not exercised (no test account) |
 | Responsive layout | Major journeys pass at desktop, tablet, and mobile sizes with no horizontal scrolling |
-| Deployment | **Not deployed.** Configuration is ready and the production server was started and probed locally; hosting accounts are needed (see "Open items") |
-| CI | GitHub Actions runs on PR #1. The currency change and Iteration 5 work are not pushed yet, so CI has not run on them. |
+| Deployment | **Deployed** (Render API, Vercel frontend, Atlas, Clerk) by the owner as of October 2026; see [DEPLOYMENT.md](DEPLOYMENT.md) |
+| CI | GitHub Actions config is in the repository; check the Actions tab for the latest run on `main`. |
+| Budgeting (income, budgets, cash flow) | Implemented in October 2026. Unit tests pass; the new API integration tests were written but not yet run against MongoDB when this was written. |
+
+## Changes since Iteration 5 (October 2026)
+
+| Change | Summary | Where |
+|---|---|---|
+| Admin-managed categories | Categories moved from a hard-coded list to MongoDB. Admins add, rename, recolor, hide and delete them (deleting is blocked while bills use one). Bills keep a hidden category when edited. | `Category` model, `/api/categories`, `/api/admin/categories`, Admin → Categories |
+| Month-scoped dashboard | Monthly Flow, stats and Upcoming follow the selected month; recurring bills for months not yet generated are projected in the browser. | `src/lib/billMonth.ts`, `useBillStore`, `useMonthBills` |
+| Stale-deploy handling | A blank page after a release (old tab, new chunks) now triggers one automatic reload, or a reload screen. | `src/lib/chunkReload.ts`, `ChunkErrorBoundary` |
+| Budgeting (Phase 1) | Income sources, a Cash Flow card, per-category monthly limits, an optional needs/wants/savings split, and an EMI-share warning. All configurable per user; category type (Need/Want/Savings) is set by admins. | `IncomeSource`, `Budget`, `BudgetSettings` models; `/api/income`, `/api/budgets`, `/api/budget-settings`; Budget tab |
+| Docs | API, architecture, design, testing, deployment, mocked-vs-real and this page updated; new [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md). | `docs/` |
+
+Test counts in the next section are Iteration 5 figures and are now out of date; run the commands in [TESTING.md](TESTING.md) for current numbers. On a Node 22 machine five currency formatting tests fail (`₹1.0Cr` vs `₹1Cr`); the project targets Node 24.
+
+Deferred to a later phase: savings goals (for example a school-fee fund), a quick "log a spend" entry, household sharing, a configurable month start day, budget rollover, alert toggles, and per-user category type overrides.
 
 ## Verified in Iteration 5
 
@@ -71,12 +86,15 @@ Use a Clerk development instance with two test users: one listed in `ADMIN_CLERK
 10. **Admin**: reload `/admin` directly (the bug fixed above); open Users (grant and revoke admin for the regular user), Pricing (edit a tier and see it on the landing page), Branding and Theme.
 11. **Non-admin**: as the regular user, visit `/admin` and be redirected to the dashboard.
 12. **Sign out**; visiting `/dashboard` redirects to sign-in.
+13. **Categories** (admin): Admin → Categories; add "Pet care" as a Want, hide it, and confirm it disappears from the Add Bill dropdown but old bills keep their label.
+14. **Income and cash flow**: Budget → Income, add a monthly salary; the dashboard Cash Flow card shows free-to-spend; switch months and confirm recurring bills are included. Mark this month's income received.
+15. **Budgets**: Budget → Budgets, set a limit on one category below its spend and check it turns red with "over by"; Budget → Settings, switch to the needs/wants/savings split and save.
 
 ## Open items and limitations
 
 ### Blockers (need account access)
 
-- **Deployment**: requires a Render account (API), a Vercel project (frontend), a MongoDB Atlas cluster and database user, and optionally an AWS S3 bucket and IAM user. Follow [DEPLOYMENT.md](DEPLOYMENT.md) in its recommended order, then run its post-deploy checklist.
+- **Remaining deployment items**: the custom API domain (`api.billwill.site`), an optional AWS S3 bucket for logos, and running the post-deploy checklist in [DEPLOYMENT.md](DEPLOYMENT.md) against the live system.
 - **Clerk**: a production (or staging) instance with your domain configured; a test user for signed-in browser checks with real Clerk.
 - **CI secret**: add `VITE_CLERK_PUBLISHABLE_KEY` (a development key) as a repository secret so the signed-out smoke job runs; without it the job is skipped with a notice.
 
@@ -95,4 +113,8 @@ Atlas (network access, performance), real Clerk sign-in and token verification, 
 - Remaining `npm audit` advisories need major upgrades (Vitest, Vite, Tailwind 4, React Router 7); they affect dev, test, or build tooling, or React Router features the app does not use.
 - Reminders are in-app only (no email or push); there is no background scheduler.
 - Deleting a bill keeps its payment and note records.
+- Income and budget amounts are stored without currency conversion and assume rupees.
+- Budget "spent" is the total of bills in a category for the month (bills are the only expense record); there is no separate spending ledger yet.
+- The "Savings & investments" default category exists only on a fresh database; add it by hand on an existing one.
+- Category type (Need/Want/Savings) is global, set by admins, not per user.
 - Clerk profile changes (email, name) can take up to 15 minutes to appear.

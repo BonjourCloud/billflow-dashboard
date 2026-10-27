@@ -5,7 +5,9 @@ import {
   CATEGORY_COLOR_PALETTE,
   Category,
   DEFAULT_CATEGORIES,
+  defaultKindForSlug,
   slugifyCategoryLabel,
+  type CategoryKind,
 } from "../models/Category.js";
 
 export interface CategoryDto {
@@ -13,6 +15,7 @@ export interface CategoryDto {
   slug: string;
   label: string;
   color: string;
+  kind: CategoryKind;
   sort_order: number;
   is_active: boolean;
 }
@@ -22,6 +25,7 @@ interface CategoryLean {
   slug: string;
   label: string;
   color?: string;
+  kind?: CategoryKind;
   sort_order?: number;
   is_active?: boolean;
 }
@@ -32,6 +36,7 @@ export function toCategoryDto(category: CategoryLean): CategoryDto {
     slug: category.slug,
     label: category.label,
     color: category.color ?? "#3c83f6",
+    kind: category.kind ?? defaultKindForSlug(category.slug),
     sort_order: category.sort_order ?? 0,
     is_active: category.is_active !== false,
   };
@@ -54,6 +59,7 @@ export async function listCategories(): Promise<CategoryDto[]> {
       slug: c.slug,
       label: c.label,
       color: c.color,
+      kind: c.kind,
       sort_order: c.sort_order,
       is_active: true,
     }));
@@ -132,6 +138,7 @@ async function uniqueSlug(label: string): Promise<string> {
 export async function createCategory(
   label: string,
   color?: string,
+  kind: CategoryKind = "need",
 ): Promise<CategoryDto> {
   const slug = await uniqueSlug(label);
   const last = await Category.findOne().sort({ sort_order: -1 }).lean();
@@ -141,6 +148,7 @@ export async function createCategory(
     slug,
     label,
     color: color ?? CATEGORY_COLOR_PALETTE[count % CATEGORY_COLOR_PALETTE.length],
+    kind,
     sort_order: (last?.sort_order ?? 0) + 1,
     is_active: true,
   });

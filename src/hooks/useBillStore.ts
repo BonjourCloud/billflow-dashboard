@@ -244,9 +244,14 @@ export function useBillStore() {
     [selectedMonth, monthScope.carriedOverCount, monthScope.projectedCount],
   );
 
-  const upcomingBills = useMemo(() =>
-    bills.filter(b => b.status === 'pending').sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3),
-    [bills]
+  // Upcoming follows the month selected on the hero card (includes expected recurring bills).
+  const upcomingBills = useMemo(
+    () =>
+      monthScope.bills
+        .filter((b) => b.status === 'pending')
+        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+        .slice(0, 3),
+    [monthScope],
   );
 
   const addBill = useCallback((bill: Omit<Bill, '_id'>) => {
@@ -275,6 +280,8 @@ export function useBillStore() {
     allBills: bills,
     stats,
     month,
+    selectedMonth,
+    monthBills: monthScope.bills,
     upcomingBills,
     filterStatus,
     setFilterStatus,

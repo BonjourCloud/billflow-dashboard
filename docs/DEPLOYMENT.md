@@ -10,7 +10,7 @@ BillWill deploys as three pieces:
 
 Authentication uses Clerk, and optional branding-logo uploads use a private AWS S3 bucket.
 
-> **Status (Iteration 5):** BillWill has **not been deployed yet**; no Vercel project, Render service, Atlas cluster, or production Clerk instance has been connected from this repository. What has been verified locally: the compiled API started exactly as Render runs it (`npm start`, `NODE_ENV=production`, `TRUST_PROXY=1`) against a MongoDB replica set, with `/api/health` and `/api/ready` returning `200`, JSON `401`/`404`/`400` errors, CORS limited to `CLIENT_URL`, Helmet security headers, rate-limit headers, and no secrets in its logs. The configuration is also checked by CI and the tests in [TESTING.md](TESTING.md). Use the post-deploy checklist at the end the first time you deploy.
+> **Status (October 2026):** BillWill is deployed by its owner: the API on Render (`https://billflow-api-96to.onrender.com`), the frontend on Vercel (`billwill.site`, `billwill-psi.vercel.app`), data on MongoDB Atlas, sign-in on Clerk. Both platforms deploy from the `main` branch of the personal repository (`raj3176/billwill`, git remote `personal`). The custom `api.billwill.site` layout below is the intended end state and may not be configured yet. Before the first deployment, the following was verified locally: the compiled API started exactly as Render runs it (`npm start`, `NODE_ENV=production`, `TRUST_PROXY=1`) against a MongoDB replica set, with `/api/health` and `/api/ready` returning `200`, JSON `401`/`404`/`400` errors, CORS limited to `CLIENT_URL`, Helmet security headers, rate-limit headers, and no secrets in its logs. The configuration is also checked by CI and the tests in [TESTING.md](TESTING.md). Use the post-deploy checklist at the end the first time you deploy.
 
 ## Recommended order
 
@@ -43,7 +43,7 @@ Add the domains in each platform's dashboard (Vercel → Project → Domains; Re
 3. Network access: allow the Render service's outbound IP addresses (listed in the Render dashboard for your service). Allowing `0.0.0.0/0` also works but relies entirely on the database credentials.
 4. Copy the `mongodb+srv://…` connection string, include the database name in the path, and store it only as the `MONGODB_URI` secret on Render.
 
-On startup the API connects, seeds the default pricing tiers if the collection is empty (only at startup — public reads never write, so tiers an admin deletes stay deleted), and lets Mongoose create the indexes defined in `server/src/models/` (including the unique idempotency-key indexes for payments and installment plans).
+On startup the API connects, seeds the default pricing tiers and the default bill categories if their collections are empty (only at startup — public reads never write, so tiers or categories an admin deletes stay deleted), and lets Mongoose create the indexes defined in `server/src/models/` (including the unique idempotency-key indexes for payments and installment plans).
 
 ## 2. Clerk
 
@@ -79,6 +79,8 @@ Endpoints useful for operations:
 
 Both bypass authentication and rate limiting.
 
+**Schema changes need no migration.** New collections (`categories`, `incomesources`, `budgets`, `budgetsettings`) and their indexes are created by Mongoose the first time the new API version starts or is used. Existing documents are not rewritten: a category without a stored `kind` is treated as a need (entertainment and software as wants) until an admin sets it. The default "Savings & investments" category is seeded only into an empty categories collection, so on an existing database add it from Admin → Categories (type Savings).
+
 ### Rate limiting
 
 All `/api` routes are limited to 1000 requests per 15 minutes per signed-in user (or per client IP when signed out). Granting/revoking admin and logo uploads are limited to 30 per 15 minutes. Exceeding a limit returns JSON `429` with standard `RateLimit` headers.
@@ -107,6 +109,8 @@ Counters are kept in each instance's memory. With a single instance this is exac
    - `VITE_API_URL` — the API origin, `https://api.billwill.site` (or the raw Render URL such as `https://billwill-api.onrender.com` before the custom domain resolves). No trailing path.
    - `VITE_CLERK_PUBLISHABLE_KEY` — the Clerk publishable key.
 3. Deploy.
+
+**Release order and stale tabs.** Deploy the API first, then the frontend, because the new frontend calls endpoints the old API lacks. Vercel and Render deploy independently, so after pushing confirm that both show the same commit. If a page goes blank after a release with a console error such as `Failed to fetch dynamically imported module`, the browser has a bundle from an older build: the app reloads once automatically, and a manual hard refresh (or a Vercel redeploy if the two builds really are mismatched) fixes it.
 
 **Production builds fail fast** if `VITE_API_URL` is missing, is not an absolute URL, or uses `http://` for anything other than `localhost`, or if `VITE_CLERK_PUBLISHABLE_KEY` is missing or does not start with `pk_test_`/`pk_live_`. This prevents shipping a bundle that calls `localhost` or cannot start. Use `npm run build:dev` for a development-mode build without these checks.
 
@@ -163,3 +167,6 @@ Run these the first time you deploy and after configuration changes:
 4. Sign in with Clerk; the dashboard loads bills without `401` responses.
 5. A bootstrap admin can open `/admin` and see the user list.
 6. If S3 is configured, upload a logo in **Admin → Branding** and confirm it displays after saving.
+7. Open **Admin → Categories**: the categories list loads, and each has a Need / Want / Savings type.
+8. Open **Budget → Income**, add a monthly income, and check that the Cash Flow card on the dashboard shows it. Open **Budget → Budgets**, set a limit, reload, and confirm it persisted.
+9. Switch the dashboard to next month and confirm recurring bills still appear (projected).

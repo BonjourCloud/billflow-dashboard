@@ -7,12 +7,16 @@ import { UpcomingBillsWidget } from '@/components/dashboard/UpcomingBillsWidget'
 import { AIInsightsWidget } from '@/components/dashboard/AIInsightsWidget';
 import { BillTable } from '@/components/dashboard/BillTable';
 import { BillDialog } from '@/components/dashboard/BillDialog';
+import { CashFlowCard } from '@/components/dashboard/CashFlowCard';
+import { useIncome, useBudgetSettings } from '@/hooks/useBudget';
 import { SpendingChartWidget } from '@/components/dashboard/SpendingChartWidget';
 import { Button } from '@/components/ui/button';
 import { Bill, BillCategory } from '@/data/bills';
 
 const Index = () => {
   const store = useBillStore();
+  const { sources } = useIncome();
+  const { settings: budgetSettings } = useBudgetSettings();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
@@ -63,6 +67,13 @@ const Index = () => {
         <div className="grid grid-cols-12 gap-4">
           <HeroWidget {...store.stats} {...store.month} />
           <UpcomingBillsWidget bills={store.upcomingBills} />
+          <CashFlowCard
+            sources={sources}
+            bills={store.monthBills}
+            selectedMonth={store.selectedMonth}
+            monthLabel={store.month.monthLabel}
+            emiWarnPct={budgetSettings.emiRatioWarnPct}
+          />
           <BillTable
             bills={store.bills}
             filterStatus={store.filterStatus}

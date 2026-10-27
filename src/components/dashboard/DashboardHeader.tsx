@@ -43,21 +43,18 @@ export function DashboardHeader() {
     location.pathname === '/installments' ||
     location.pathname.startsWith('/installments');
   const isSubsActive = location.pathname === '/subscriptions';
+  const isBudgetActive = location.pathname.startsWith('/budget');
 
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
-        {settings.logo_url ? (
-          <img
-            src={settings.logo_display_url || settings.logo_url || ''}
-            alt={settings.brand_name}
-            className="h-12 w-auto max-w-[180px] object-contain"
-          />
-        ) : (
-          <div className="p-1.5 rounded-2xl bg-primary/10 overflow-hidden">
-            <Receipt className="w-6 h-6 text-primary" />
-          </div>
-        )}
+        <div className="p-2 rounded-2xl bg-primary/10 overflow-hidden">
+          {settings.logo_url ? (
+            <img src={settings.logo_display_url || settings.logo_url || ''} alt={settings.brand_name} className="w-5 h-5 object-contain" />
+          ) : (
+            <Receipt className="w-5 h-5 text-primary" />
+          )}
+        </div>
         <div>
           <h1 className="text-xl font-bold tracking-tight">{settings.brand_name}</h1>
           <p className="text-xs text-muted-foreground">Subscriptions & Bill Management</p>
@@ -98,6 +95,17 @@ export function DashboardHeader() {
           }`}
         >
           Subscriptions
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/budget')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            isBudgetActive
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Budget
         </button>
       </div>
       <div className="flex items-center gap-1">

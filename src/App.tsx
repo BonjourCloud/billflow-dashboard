@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SiteSettingsProvider } from "@/hooks/useSiteSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { ChunkErrorBoundary } from "@/components/ChunkErrorBoundary";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -23,6 +24,10 @@ const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminPricing = lazy(() => import("./pages/admin/AdminPricing"));
 const AdminCategories = lazy(() => import("./pages/admin/AdminCategories"));
+const BudgetLayout = lazy(() => import("./pages/budget/BudgetLayout"));
+const IncomeTab = lazy(() => import("./pages/budget/IncomeTab"));
+const BudgetsTab = lazy(() => import("./pages/budget/BudgetsTab"));
+const BudgetSettingsTab = lazy(() => import("./pages/budget/BudgetSettingsTab"));
 const AdminBranding = lazy(() => import("./pages/admin/AdminBranding"));
 const AdminTheme = lazy(() => import("./pages/admin/AdminTheme"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
@@ -43,6 +48,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <SiteSettingsProvider>
+            <ChunkErrorBoundary>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<Landing />} />
@@ -51,6 +57,12 @@ const App = () => (
                 <Route path="/installments" element={<ProtectedRoute><Installments /></ProtectedRoute>} />
                 <Route path="/installments/:id" element={<ProtectedRoute><InstallmentDetail /></ProtectedRoute>} />
                 <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
+                <Route path="/budget" element={<ProtectedRoute><BudgetLayout /></ProtectedRoute>}>
+                  <Route index element={<Navigate to="income" replace />} />
+                  <Route path="income" element={<IncomeTab />} />
+                  <Route path="budgets" element={<BudgetsTab />} />
+                  <Route path="settings" element={<BudgetSettingsTab />} />
+                </Route>
                 <Route path="/bill/:id" element={<ProtectedRoute><BillDetail /></ProtectedRoute>} />
                 <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                   <Route index element={<AdminDashboard />} />
@@ -64,6 +76,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+            </ChunkErrorBoundary>
           </SiteSettingsProvider>
         </AuthProvider>
       </BrowserRouter>

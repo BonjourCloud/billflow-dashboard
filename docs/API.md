@@ -18,7 +18,7 @@ Every error response is JSON: `{ "error": "<message>" }`. Validation errors may 
 | 401 | No valid session (`Authentication required.`) |
 | 403 | Signed in but not an admin (`Admin access required.`) |
 | 404 | Not found, or belongs to another user, or unknown route |
-| 409 | Duplicate submission (same idempotency key, identical payment within 4 s) or duplicate pricing-tier slug |
+| 409 | Duplicate submission (same idempotency key, identical payment within 4 s), duplicate pricing-tier slug or category name, or deleting a category that bills still use |
 | 413 | Body over 100 kB, or logo over 2 MB |
 | 429 | Rate limit exceeded (1000 requests / 15 min per user or IP; 30 / 15 min for admin role changes and logo uploads) |
 | 500 | Unexpected error; details are only in the server log |
@@ -44,13 +44,52 @@ Request bodies are validated strictly: unknown fields (including `userId`) are r
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/api/bills` | user | All bills, by due date. Creates any due recurring occurrences first. |
+| GET | `/api/bills` | user | All bills, by due date. Creates any due recurring occurrences first, up to next month; later months are projected in the browser, not stored. |
 | GET | `/api/bills/:id` | user | |
 | POST | `/api/bills` | user | `{ name, amount, dueDate, status, category, recurrenceType?, recurringDay?, isSubscription? }`. `recurrenceType: "recurring"` also creates a subscription series. `201` |
 | PATCH | `/api/bills/:id` | user | Any of the above plus `updateScope: "this" \| "future"` for recurring bills |
 | DELETE | `/api/bills/:id?scope=this\|future\|all` | user | `204`. Paid occurrences are never deleted by `future`. Installment bills return `400` (cancel the plan instead). |
 
-`status`: `paid`, `pending`, `overdue`. `category`: `utilities`, `entertainment`, `software`, `finance`, `insurance`, `housing`, `loans`, `transport`, `health`, `education`, `groceries`.
+`status`: `paid`, `pending`, `overdue`. `category`: the `slug` of an active category from `GET /api/categories` (see [Categories](#categories)). A bill, subscription or installment plan keeps its category when edited even if an admin has since hidden it; picking a hidden or unknown category is `400`.
+
+## Categories
+
+Categories are stored in MongoDB and managed by admins (Admin → Categories). Bills, subscriptions, installment plans and budgets refer to a category by its immutable `slug`. An empty collection falls back to the built-in defaults, and the defaults are seeded on first start.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/categories` | user | All categories, active and hidden, by `sort_order`: `{ id, slug, label, color, kind, sort_order, is_active }`. `kind` is `need`, `want` or `savings`. |
+| POST | `/api/admin/categories` | admin | `{ label (1–30 chars), color? (#rrggbb), kind? }`. The slug is generated from the label. `kind` defaults to `need`. `409` if the name exists (case-insensitive). `201` |
+| PATCH | `/api/admin/categories/:id` | admin | Any of `label`, `color`, `kind`, `is_active`, `sort_order`. `400` if it would leave no active category. |
+| DELETE | `/api/admin/categories/:id` | admin | `409` while any bill, subscription or plan uses it (hide it instead). `400` for the last active category. |
+
+Category `kind` drives the budget views: bills in a `savings` category count as money saved rather than as bills, and the needs/wants/savings split groups spending by kind.
+
+## Income
+
+Income sources are per user. Occurrences are worked out on the fly (monthly sources repeat on their day, clamped to month length), so nothing is stored for future months.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/income` | user | `{ _id, name, amount, frequency, recurringDay, startDate, endDate, isActive, countInPlan, receivedCycles }` for each source |
+| POST | `/api/income` | user | `{ name (1–100), amount (> 0), frequency: "monthly" \| "one_time", startDate, recurringDay? (1–31, default: day of startDate), endDate?, countInPlan? }`. `201` |
+| PATCH | `/api/income/:id` | user | Any of the above plus `isActive`. At least one field. |
+| PUT | `/api/income/:id/received` | user | `{ cycle: "YYYY-MM", received: boolean }` records or clears a receipt. Returns the source. |
+| DELETE | `/api/income/:id` | user | `{ success: true }` |
+
+`countInPlan: false` keeps a source listed but leaves it out of expected income (for irregular earnings).
+
+## Budgets
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/budgets` | user | `[{ category, limit }]`: the user's monthly limits, one per category |
+| PUT | `/api/budgets/:slug` | user | `{ limit }` (> 0, up to 1,000,000,000). Creates or replaces the limit. `400` for an unknown or hidden category. |
+| DELETE | `/api/budgets/:slug` | user | Removes the limit. `{ success: true }` |
+| GET | `/api/budget-settings` | user | `{ method, needsPct, wantsPct, savingsPct, emiRatioWarnPct }`; defaults `limits`, 50 / 30 / 20, 40 until saved |
+| PUT | `/api/budget-settings` | user | Full object. `method`: `limits` or `50-30-20`. The three percentages are whole numbers that must add up to 100; `emiRatioWarnPct` is 1–100. |
+
+Spent amounts, free-to-spend and the savings rate are not returned by the API: the browser computes them from bills, income and these settings (`src/lib/cashFlow.ts`).
 
 ## Payments and notes
 

@@ -105,6 +105,20 @@ import {
   seedCategoriesIfEmpty,
 } from "./models/Category.js";
 import {
+  IncomeSource,
+  createIncomeSchema,
+  updateIncomeSchema,
+  incomeReceivedSchema,
+  isValidIncomeId,
+} from "./models/IncomeSource.js";
+import {
+  Budget,
+  BudgetSettings,
+  DEFAULT_BUDGET_SETTINGS,
+  budgetLimitSchema,
+  budgetSettingsUpdateSchema,
+} from "./models/Budget.js";
+import {
   categoryLabelTaken,
   countOtherActiveCategories,
   createCategory,
@@ -670,6 +684,322 @@ app.get("/api/admin/summary", async (req, res) => {
   }
 });
 
+// ───────────────────────── Income sources ─────────────────────────
+
+function toIncomeDto(source: {
+  _id: { toString(): string };
+  name: string;
+  amount: number;
+  frequency: string;
+  recurringDay: number;
+  startDate: Date;
+  endDate?: Date | null;
+  isActive?: boolean;
+  countInPlan?: boolean;
+  receivedCycles?: string[];
+}) {
+  return {
+    _id: source._id.toString(),
+    name: source.name,
+    amount: source.amount,
+    frequency: source.frequency,
+    recurringDay: source.recurringDay,
+    startDate: source.startDate.toISOString(),
+    endDate: source.endDate ? source.endDate.toISOString() : null,
+    isActive: source.isActive !== false,
+    countInPlan: source.countInPlan !== false,
+    receivedCycles: source.receivedCycles ?? [],
+  };
+}
+
+app.get("/api/income", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    const sources = await IncomeSource.find({ userId })
+      .sort({ createdAt: 1 })
+      .lean();
+    return res.status(200).json(sources.map(toIncomeDto));
+  } catch (error) {
+    console.error("Failed to list income sources:", error);
+    return res.status(500).json({ error: "Failed to list income sources." });
+  }
+});
+
+app.post("/api/income", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = createIncomeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid income data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const { startDate, endDate } = parsed.data;
+    if (endDate && endDate.getTime() < startDate.getTime()) {
+      return res
+        .status(400)
+        .json({ error: "End date cannot be before the start date." });
+    }
+
+    const created = await IncomeSource.create({
+      userId,
+      name: parsed.data.name,
+      amount: parsed.data.amount,
+      frequency: parsed.data.frequency,
+      startDate,
+      endDate: endDate ?? null,
+      recurringDay: parsed.data.recurringDay ?? startDate.getUTCDate(),
+      countInPlan: parsed.data.countInPlan ?? true,
+    });
+
+    return res.status(201).json(toIncomeDto(created.toObject()));
+  } catch (error) {
+    console.error("Failed to create income source:", error);
+    return res.status(500).json({ error: "Failed to create income source." });
+  }
+});
+
+app.patch("/api/income/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidIncomeId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid income ID format." });
+    }
+
+    const parsed = updateIncomeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid income data.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const existing = await IncomeSource.findOne({ _id: req.params.id, userId });
+    if (!existing) {
+      return res.status(404).json({ error: "Income source not found." });
+    }
+
+    const nextStart = parsed.data.startDate ?? existing.startDate;
+    const nextEnd =
+      parsed.data.endDate !== undefined ? parsed.data.endDate : existing.endDate;
+    if (nextEnd && nextEnd.getTime() < nextStart.getTime()) {
+      return res
+        .status(400)
+        .json({ error: "End date cannot be before the start date." });
+    }
+
+    Object.assign(existing, parsed.data);
+    // Moving the start date re-anchors the day unless a day was given too.
+    if (parsed.data.startDate && parsed.data.recurringDay === undefined) {
+      existing.recurringDay = parsed.data.startDate.getUTCDate();
+    }
+    await existing.save();
+
+    return res.status(200).json(toIncomeDto(existing.toObject()));
+  } catch (error) {
+    console.error("Failed to update income source:", error);
+    return res.status(500).json({ error: "Failed to update income source." });
+  }
+});
+
+app.put("/api/income/:id/received", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidIncomeId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid income ID format." });
+    }
+
+    const parsed = incomeReceivedSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid request.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const update = parsed.data.received
+      ? { $addToSet: { receivedCycles: parsed.data.cycle } }
+      : { $pull: { receivedCycles: parsed.data.cycle } };
+
+    const updated = await IncomeSource.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      update,
+      { new: true },
+    ).lean();
+
+    if (!updated) {
+      return res.status(404).json({ error: "Income source not found." });
+    }
+    return res.status(200).json(toIncomeDto(updated));
+  } catch (error) {
+    console.error("Failed to update received status:", error);
+    return res.status(500).json({ error: "Failed to update received status." });
+  }
+});
+
+app.delete("/api/income/:id", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    if (!isValidIncomeId(req.params.id)) {
+      return res.status(400).json({ error: "Invalid income ID format." });
+    }
+
+    const deleted = await IncomeSource.findOneAndDelete({
+      _id: req.params.id,
+      userId,
+    }).lean();
+    if (!deleted) {
+      return res.status(404).json({ error: "Income source not found." });
+    }
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete income source:", error);
+    return res.status(500).json({ error: "Failed to delete income source." });
+  }
+});
+
+// ───────────────────────── Budgets ─────────────────────────
+
+app.get("/api/budgets", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    const budgets = await Budget.find({ userId }).lean();
+    return res
+      .status(200)
+      .json(budgets.map((b) => ({ category: b.category, limit: b.limit })));
+  } catch (error) {
+    console.error("Failed to list budgets:", error);
+    return res.status(500).json({ error: "Failed to list budgets." });
+  }
+});
+
+app.put("/api/budgets/:slug", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const slug = categorySlugSchema.safeParse(req.params.slug);
+    if (!slug.success) {
+      return res.status(400).json({ error: "Invalid category." });
+    }
+
+    const parsed = budgetLimitSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid budget limit.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const categoryProblem = await getCategoryProblem(slug.data);
+    if (categoryProblem) {
+      return res.status(400).json({ error: categoryProblem });
+    }
+
+    const saved = await Budget.findOneAndUpdate(
+      { userId, category: slug.data },
+      { $set: { limit: parsed.data.limit } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+
+    return res.status(200).json({ category: saved.category, limit: saved.limit });
+  } catch (error) {
+    console.error("Failed to save budget:", error);
+    return res.status(500).json({ error: "Failed to save budget." });
+  }
+});
+
+app.delete("/api/budgets/:slug", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const slug = categorySlugSchema.safeParse(req.params.slug);
+    if (!slug.success) {
+      return res.status(400).json({ error: "Invalid category." });
+    }
+
+    await Budget.deleteOne({ userId, category: slug.data });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to remove budget:", error);
+    return res.status(500).json({ error: "Failed to remove budget." });
+  }
+});
+
+app.get("/api/budget-settings", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    const saved = await BudgetSettings.findOne({ userId }).lean();
+    return res.status(200).json({
+      method: saved?.method ?? DEFAULT_BUDGET_SETTINGS.method,
+      needsPct: saved?.needsPct ?? DEFAULT_BUDGET_SETTINGS.needsPct,
+      wantsPct: saved?.wantsPct ?? DEFAULT_BUDGET_SETTINGS.wantsPct,
+      savingsPct: saved?.savingsPct ?? DEFAULT_BUDGET_SETTINGS.savingsPct,
+      emiRatioWarnPct:
+        saved?.emiRatioWarnPct ?? DEFAULT_BUDGET_SETTINGS.emiRatioWarnPct,
+    });
+  } catch (error) {
+    console.error("Failed to load budget settings:", error);
+    return res.status(500).json({ error: "Failed to load budget settings." });
+  }
+});
+
+app.put("/api/budget-settings", async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const parsed = budgetSettingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message ?? "Invalid budget settings.",
+        details: parsed.error.flatten(),
+      });
+    }
+
+    await BudgetSettings.findOneAndUpdate(
+      { userId },
+      { $set: parsed.data },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+    return res.status(200).json(parsed.data);
+  } catch (error) {
+    console.error("Failed to save budget settings:", error);
+    return res.status(500).json({ error: "Failed to save budget settings." });
+  }
+});
+
 // GET /api/categories — categories for dropdowns and labels (any signed-in user).
 // Includes inactive ones so older bills can still show their category name.
 app.get("/api/categories", async (req, res) => {
@@ -708,7 +1038,11 @@ app.post("/api/admin/categories", async (req, res) => {
     // so adding the first custom category never hides them.
     await seedCategoriesIfEmpty();
 
-    const created = await createCategory(parsed.data.label, parsed.data.color);
+    const created = await createCategory(
+      parsed.data.label,
+      parsed.data.color,
+      parsed.data.kind,
+    );
     return res.status(201).json(created);
   } catch (error) {
     console.error("Failed to create category:", error);

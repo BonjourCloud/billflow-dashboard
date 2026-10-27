@@ -22,26 +22,38 @@ export const categorySlugSchema = z
   .max(40, "Invalid category.")
   .regex(CATEGORY_SLUG_PATTERN, "Invalid category.");
 
+export const CATEGORY_KINDS = ["need", "want", "savings"] as const;
+export type CategoryKind = (typeof CATEGORY_KINDS)[number];
+
+/** Kind used for a category that has none stored (older data): wants are leisure, the rest are needs. */
+export function defaultKindForSlug(slug: string): CategoryKind {
+  if (slug === "entertainment" || slug === "software") return "want";
+  if (slug === "savings") return "savings";
+  return "need";
+}
+
 export interface DefaultCategory {
   slug: string;
   label: string;
   color: string;
   sort_order: number;
+  kind: CategoryKind;
 }
 
 /** Seeded into an empty collection at startup; also the fallback list when the collection is empty. */
 export const DEFAULT_CATEGORIES: readonly DefaultCategory[] = [
-  { slug: "utilities", label: "Utilities", color: "#3c83f6", sort_order: 1 },
-  { slug: "entertainment", label: "Entertainment", color: "#b055dd", sort_order: 2 },
-  { slug: "software", label: "Software", color: "#21c45d", sort_order: 3 },
-  { slug: "finance", label: "Finance", color: "#f59f0a", sort_order: 4 },
-  { slug: "insurance", label: "Insurance", color: "#ef486f", sort_order: 5 },
-  { slug: "housing", label: "Housing", color: "#26bbd9", sort_order: 6 },
-  { slug: "loans", label: "Loans & EMI", color: "#f47825", sort_order: 7 },
-  { slug: "transport", label: "Transport", color: "#2badee", sort_order: 8 },
-  { slug: "health", label: "Health", color: "#28bd98", sort_order: 9 },
-  { slug: "education", label: "Education", color: "#f9ce1f", sort_order: 10 },
-  { slug: "groceries", label: "Groceries", color: "#68c639", sort_order: 11 },
+  { slug: "utilities", label: "Utilities", color: "#3c83f6", sort_order: 1, kind: defaultKindForSlug("utilities") },
+  { slug: "entertainment", label: "Entertainment", color: "#b055dd", sort_order: 2, kind: defaultKindForSlug("entertainment") },
+  { slug: "software", label: "Software", color: "#21c45d", sort_order: 3, kind: defaultKindForSlug("software") },
+  { slug: "finance", label: "Finance", color: "#f59f0a", sort_order: 4, kind: defaultKindForSlug("finance") },
+  { slug: "insurance", label: "Insurance", color: "#ef486f", sort_order: 5, kind: defaultKindForSlug("insurance") },
+  { slug: "housing", label: "Housing", color: "#26bbd9", sort_order: 6, kind: defaultKindForSlug("housing") },
+  { slug: "loans", label: "Loans & EMI", color: "#f47825", sort_order: 7, kind: defaultKindForSlug("loans") },
+  { slug: "transport", label: "Transport", color: "#2badee", sort_order: 8, kind: defaultKindForSlug("transport") },
+  { slug: "health", label: "Health", color: "#28bd98", sort_order: 9, kind: defaultKindForSlug("health") },
+  { slug: "education", label: "Education", color: "#f9ce1f", sort_order: 10, kind: defaultKindForSlug("education") },
+  { slug: "groceries", label: "Groceries", color: "#68c639", sort_order: 11, kind: defaultKindForSlug("groceries") },
+  { slug: "savings", label: "Savings & investments", color: "#8b5cf6", sort_order: 12, kind: "savings" },
 ];
 
 export const DEFAULT_CATEGORY_SLUGS: readonly string[] = DEFAULT_CATEGORIES.map(
@@ -87,6 +99,7 @@ const categorySchema = new mongoose.Schema(
       default: "#3c83f6",
       match: CATEGORY_COLOR_PATTERN,
     },
+    kind: { type: String, enum: CATEGORY_KINDS, default: "need" },
     sort_order: { type: Number, default: 0, index: true },
     is_active: { type: Boolean, default: true },
   },
@@ -112,6 +125,7 @@ export const createCategorySchema = z
   .object({
     label: labelSchema,
     color: colorSchema.optional(),
+    kind: z.enum(CATEGORY_KINDS).optional(),
   })
   .strict();
 
@@ -120,6 +134,7 @@ export const updateCategorySchema = z
     label: labelSchema.optional(),
     color: colorSchema.optional(),
     is_active: z.boolean().optional(),
+    kind: z.enum(CATEGORY_KINDS).optional(),
     sort_order: z.number().int().min(0).max(999).optional(),
   })
   .strict()

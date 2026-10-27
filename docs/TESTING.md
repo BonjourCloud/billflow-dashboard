@@ -49,7 +49,11 @@ They cover:
 - admin helpers and the role endpoint, with Clerk mocked;
 - startup failure reporting and graceful shutdown;
 - frontend hooks and stores (e.g. the role hook fetches once per signed-in user);
-- drift checks for `render.yaml` and `vercel.json`.
+- drift checks for `render.yaml` and `vercel.json`;
+- categories: default list and kinds (including the frontend fallback list matching the server), slug generation and schemas (`categories-backend.test.ts`);
+- month scoping and projection of recurring bills across month and year boundaries (`bill-month.test.ts`);
+- stale-deploy reload guard (`chunk-reload.test.ts`);
+- budgeting: income occurrences (month-end clamping, end dates, one-time, inactive), cash flow and EMI ratio, budget row status, needs/wants/savings summaries, and the income, budget-limit and budget-settings schemas (`budget-cashflow.test.ts`).
 
 These tests do **not** connect to MongoDB: database calls are mocked or simulated in memory.
 
@@ -72,6 +76,8 @@ They verify:
 - public reads (`/api/site-settings`, `/api/pricing-tiers`) don't write to an empty database, and concurrent startup seeding creates each default tier once;
 - Clerk profile sync is cached per user for 15 minutes while role changes apply immediately;
 - every `:id` route returns a JSON `4xx` (never `500`) for malformed IDs and `404` for unknown ones; owner IDs in query strings or bodies are ignored or rejected; MongoDB operator injection and invalid bill fields are rejected (`request-validation.test.ts`);
+- admin-managed categories: seeding, create/rename/hide/delete rules (duplicates, in-use, last active), bills rejecting hidden or unknown categories while keeping an unchanged one (`categories.test.ts`);
+- income, budget limits and budget settings: CRUD, per-user isolation, received-cycle toggling, and validation (`budget.test.ts`);
 - core features through the real routes: bill CRUD, payment history and notes, recurring bills with `this`/`future`/`all` scopes, subscription generation without duplicates under concurrent loads, reminders (one per bill and type, read/read-all/dismiss, cleared on payment or deletion), installment update/cancel, pricing-tier and theme validation, admin summary, and generic `500`s without leaking internals when the database fails (`core-features.test.ts`).
 
 **First run:** `mongodb-memory-server` downloads a MongoDB binary (around 100 MB) into `node_modules/.cache/mongodb-memory-server/`. Later runs reuse it until `node_modules` is reinstalled. CI skips the install-time download (`MONGOMS_DISABLE_POSTINSTALL=1`) and caches that directory, keyed on `package-lock.json`.

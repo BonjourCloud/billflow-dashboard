@@ -79,7 +79,7 @@ describe("Admin-managed categories through the real API", () => {
     const slugs = list.body.map((c) => c.slug);
     // Creating the first custom category materialises the defaults too.
     expect(slugs).toEqual(expect.arrayContaining(["utilities", "car-emi"]));
-    expect(await Category.countDocuments()).toBe(12);
+    expect(await Category.countDocuments()).toBe(13);
   });
 
   it("rejects duplicate names (case-insensitive) and invalid input", async () => {
@@ -120,7 +120,7 @@ describe("Admin-managed categories through the real API", () => {
     });
     expect(sub.status, JSON.stringify(sub.body)).toBe(201);
 
-    const plan = await alice.post<{ category: string }>("/api/installments", {
+    const plan = await alice.post<{ plan: { category: string } }>("/api/installments", {
       name: "Car loan",
       principalAmount: 600000,
       totalInstallments: 12,
@@ -128,18 +128,18 @@ describe("Admin-managed categories through the real API", () => {
       category: "car-emi",
     });
     expect(plan.status, JSON.stringify(plan.body)).toBe(201);
-    expect(plan.body.category).toBe("car-emi");
+    expect(plan.body.plan.category).toBe("car-emi");
   });
 
   it("defaults a plan without a category to finance", async () => {
-    const plan = await alice.post<{ category: string }>("/api/installments", {
+    const plan = await alice.post<{ plan: { category: string } }>("/api/installments", {
       name: "Phone",
       principalAmount: 60000,
       totalInstallments: 6,
       startDate: "2027-01-05",
     });
     expect(plan.status, JSON.stringify(plan.body)).toBe(201);
-    expect(plan.body.category).toBe("finance");
+    expect(plan.body.plan.category).toBe("finance");
   });
 
   it("stops new use of a deactivated category but keeps existing bills editable", async () => {

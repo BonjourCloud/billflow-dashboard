@@ -2,6 +2,8 @@
 
 ## Overview
 
+> This page is the short overview. The full architecture and detailed design, with diagrams, is in [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md).
+
 BillWill is a React single-page app backed by an Express + MongoDB API. Clerk handles sign-in; S3 optionally stores branding logos.
 
 ```text
@@ -29,6 +31,9 @@ BillWill is a React single-page app backed by an Express + MongoDB API. Clerk ha
 │   ├── lib/apiBaseUrl.ts     # VITE_API_URL resolution (required in production)
 │   ├── lib/clerkPublishableKey.ts # VITE_CLERK_PUBLISHABLE_KEY validation
 │   ├── lib/insights.ts       # Rule-based dashboard insights (no AI service)
+│   ├── lib/billMonth.ts      # Month scoping and projection of recurring bills
+│   ├── lib/cashFlow.ts       # Income occurrences, cash flow, budget rows (pure functions)
+│   ├── lib/chunkReload.ts    # One-shot reload when a lazy chunk fails after a deploy
 │   ├── hooks/                # Data hooks per feature (bills, installments, notifications, …)
 │   ├── data/                 # Shared frontend types and constants (no mock data)
 │   ├── pages/, components/   # Screens, dashboard widgets, admin panel, shadcn/ui
@@ -40,7 +45,7 @@ BillWill is a React single-page app backed by an Express + MongoDB API. Clerk ha
 │       ├── config/db.ts      # MongoDB connection
 │       ├── config/s3.ts      # Lazy S3 client
 │       ├── models/           # Mongoose models + zod request schemas
-│       └── services/         # Recurring-bill generation, reminders
+│       └── services/         # Recurring-bill generation, reminders, categories
 ├── e2e/                      # Playwright smoke tests
 ├── vercel.json, render.yaml  # Deployment config (see DEPLOYMENT.md)
 └── .github/workflows/ci.yml  # CI
@@ -65,7 +70,7 @@ Middleware runs in this order (`server/src/index.ts`):
 
 ### Authentication and authorization
 
-- Every non-public handler calls `getAuth(req)` and returns `401` without a user. Public routes: `GET /api/health`, `/api/ready`, `/api/site-settings`, `/api/pricing-tiers` (hidden tiers only for admins).
+- Every non-public handler calls `getAuth(req)` and returns `401` without a user. Public routes: `GET /api/health`, `/api/ready`, `/api/site-settings`, `/api/pricing-tiers` (hidden tiers only for admins). `GET /api/categories` needs a signed-in user.
 - User data is always queried with the caller's `userId`, so another user's ID returns `404`.
 - Admin routes (`/api/admin/*`) call `requireAdminAuth`: a user is an admin if their Clerk ID is in `ADMIN_CLERK_USER_IDS` (checked on every request, never saved) or their `User` document has `role: "admin"` (set only through grant/revoke).
 - `GET /api/users/me` and `GET /api/users/me/role` copy email, name, and avatar from Clerk into the `User` collection at most once every 15 minutes per user (`profileSyncedAt`). Roles are never cached, so grants, revocations, and `ADMIN_CLERK_USER_IDS` changes apply on the next request.
@@ -82,13 +87,17 @@ Middleware runs in this order (`server/src/index.ts`):
 | `InstallmentPlan` | EMI plan: principal, down payment, interest, schedule totals, paid/remaining balance |
 | `Notification` | In-app `due_soon` / `overdue` reminders (one per type per bill) |
 | `PricingTier` | Landing-page pricing (seeded on first start) |
+| `Category` | Bill category managed by admins: unique `slug`, label, color, `kind` (`need`/`want`/`savings`), active flag. Seeded with 12 defaults when empty. Referenced by slug from bills, series, plans and budgets |
+| `IncomeSource` | A user's income (monthly or one-time), whether it counts in the plan, and which `YYYY-MM` cycles were received. Occurrences are computed, not stored |
+| `Budget` | One monthly limit per user and category (unique pair) |
+| `BudgetSettings` | One document per user: method, needs/wants/savings split, EMI warning threshold |
 | `SiteSettings` | Branding and theme settings (single document) |
 
 ### Background work without a scheduler
 
 There are no cron jobs. Work is done lazily when the user asks for data:
 
-- Listing bills, subscriptions, or notifications first creates any recurring occurrences that are due.
+- Listing bills, subscriptions, or notifications first creates any recurring occurrences that are due, up to next month. Months further ahead are projected in the browser (`projectRecurringBills`) and never stored.
 - Listing notifications creates any missing reminders (due within 5 days, or overdue). Reminders are in-app only; no email or push is sent.
 
 ### Consistency guarantees
@@ -98,14 +107,17 @@ There are no cron jobs. Work is done lazily when the user asks for data:
 
 ### Startup and shutdown
 
-The environment is validated when the server module loads (skipped when `NODE_ENV=test`). `startServer()` then connects to MongoDB, seeds pricing tiers, and listens. Configuration or connection errors are logged (with connection-string credentials redacted) and the process exits with code 1. `SIGTERM`/`SIGINT` close the HTTP server and the MongoDB connection, with a 10-second forced-exit watchdog.
+The environment is validated when the server module loads (skipped when `NODE_ENV=test`). `startServer()` then connects to MongoDB, seeds pricing tiers and categories (only into empty collections, so admin edits and deletions stick), and listens. Configuration or connection errors are logged (with connection-string credentials redacted) and the process exits with code 1. `SIGTERM`/`SIGINT` close the HTTP server and the MongoDB connection, with a 10-second forced-exit watchdog.
 
 ## Frontend
 
-- **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
+- **Routing** (`src/App.tsx`): `/` landing, `/login`, then signed-in routes (`/dashboard`, `/bill/:id`, `/subscriptions`, `/installments`, `/installments/:id`, `/budget/income`, `/budget/budgets`, `/budget/settings`) behind `ProtectedRoute`, and `/admin/*` (dashboard, users, pricing, categories, branding, theme) behind `AdminRoute`. Signed-in and admin pages are lazy-loaded, so the landing page doesn't download the dashboard or the admin panel.
 - **API access** (`src/lib/api.ts`): adds `Authorization: Bearer <Clerk token>` unless a call is marked unauthenticated, and turns API JSON errors into thrown `Error`s with the server's message.
 - **Data hooks** (`src/hooks/`): one hook per feature, using TanStack Query or local state over the API. Notifications poll every 60 seconds.
 - **Branding and theme** come from `GET /api/site-settings` (schema defaults until an admin first saves) and are applied as CSS variables and the document title; light/dark preference is stored in `localStorage`. `index.html` carries static BillWill metadata for crawlers and link previews.
+- **Month scope** (`src/lib/billMonth.ts`, `useBillStore`, `useMonthBills`): the dashboard and the Budget pages work on one selected month. Stats count bills due in that month plus unpaid ones carried over from earlier months, and recurring bills not yet created are projected from their series. Due dates are UTC midnight, so months are matched in UTC; "current month" uses local time.
+- **Budget** (`src/pages/budget/`, `src/lib/cashFlow.ts`, `src/hooks/useBudget.ts`): all figures are computed in the browser. Free to spend = expected income (sources counted in the plan) − bills − money saved (bills in `savings` categories). EMIs are bills with an installment plan or in the Loans category; their share of income is compared with the configured threshold. The Cash Flow card on the dashboard and the Budgets tab share the same month hooks and query keys as the bill list.
+- **Stale deploys** (`src/lib/chunkReload.ts`, `ChunkErrorBoundary`): after a deploy, an open tab can request a lazy chunk that no longer exists. The app reloads once (guarded by `sessionStorage` to avoid loops) on Vite's `vite:preloadError` or a failed dynamic import, and otherwise shows a "reload" screen instead of a blank page.
 - **Insights** (`src/lib/insights.ts`) are computed in the browser from the user's bills, payments, and plans with fixed rules. No AI or LLM service is called.
 
 ## Configuration
