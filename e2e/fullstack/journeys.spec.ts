@@ -19,6 +19,9 @@ async function pickDueDate(page: Page, dialog: Locator) {
     .getByText(today, { exact: true })
     .click();
   await expect(dialog.getByLabel("Due Date")).not.toHaveText("Pick a date");
+  // The popover stays open after a pick and covers the submit button; clicking
+  // the dialog heading dismisses it without closing the dialog.
+  await dialog.getByRole("heading").first().click();
 }
 
 function uniqueUser(testInfo: TestInfo, label: string): string {
