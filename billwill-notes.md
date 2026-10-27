@@ -364,25 +364,44 @@ every request) or UI grant (stored in MongoDB).
 
 ---
 
-## 9. Logo notes
+## 9. Logo, favicon & social preview
 
-- **Current logo:** `public/billwill-logo.png`, committed (commit `cf120c6`) and
-  served by Vercel at **`https://billwill.site/billwill-logo.png`**. Set as the
-  branding logo by pasting that URL into **Admin → Branding → "…or paste an
-  image URL"** and saving (the server only accepts `https://` logo URLs).
+There are THREE separate "logo" surfaces — don't confuse them:
+
+**1. Branding logo (in-app header/landing) — runtime, set in Admin.**
+- `public/billwill-logo.png`, served by Vercel at
+  **`https://billwill.site/billwill-logo.png`**. Set as the branding logo by
+  pasting that URL into **Admin → Branding → "…or paste an image URL"** + Save
+  (server only accepts `https://`). Stored in DB `site_settings`
+  (`logo_display_url` / `logo_url`); the `public/` file is just where the URL points.
 - Self-hosted from our own domain = more robust than the earlier test S3 object.
-  To change the logo later: replace `public/billwill-logo.png` and push.
-- The branding logo is runtime (stored in the DB `site_settings`, read as
-  `logo_display_url` / `logo_url`); the file in `public/` is just where the URL
-  points.
-- **S3 upload is optional and not configured** — the in-app Upload button needs
-  the four `AWS_*` vars on Render. The pasted-URL path avoids S3 entirely.
-- Logo display sizing is in code:
-  - Dashboard header (`DashboardHeader.tsx`): `w-11 h-11 sm:w-12 sm:h-12`
-    (44/48px, responsive), rounded, outside the tinted box.
-  - Landing page (`Landing.tsx`): `h-10 w-auto max-w-[160px]`.
-- Legacy: `public/Test-Logo.png` (commit `a08b93d`) is still in the repo but
-  superseded by `billwill-logo.png`; safe to remove in a later cleanup.
+  To change: replace `public/billwill-logo.png` and push.
+- S3 upload path is optional and **not configured** (needs the four `AWS_*` vars
+  on Render); pasting a URL avoids S3.
+- Display sizing in code: dashboard header (`DashboardHeader.tsx`)
+  `w-14 h-14 sm:w-16 sm:h-16` (56/64px); landing (`Landing.tsx`)
+  `h-10 w-auto max-w-[160px]`.
+
+**2. Favicon (browser tab) — static, in `index.html` (commit `3b81386`).**
+- `<link rel="icon" href="/billwill-logo.png">` + apple-touch-icon. Replaced the
+  old template `favicon.svg`/`favicon.ico` (the green "zap").
+- Favicons cache hard: after deploy, hard-refresh AND close/reopen the tab (or
+  use incognito) to see the new one.
+
+**3. Social link preview (WhatsApp / iMessage / Twitter) — Open Graph tags in
+`index.html` (commit `e1eeed6`).**
+- These are separate from the favicon. Added `og:image`, `og:url`,
+  `og:site_name`, `og:image:alt`, and Twitter `card`/`title`/`description`/`image`,
+  all pointing at `https://billwill.site/billwill-logo.png` (scrapers need
+  absolute HTTPS URLs). Before this, there was no `og:image`, so WhatsApp fell
+  back to the old favicon and showed a cached "BillFlow" title.
+- **Cache busting:** scrapers cache aggressively. To refresh: Facebook Sharing
+  Debugger → "Scrape Again" (WhatsApp shares that cache), or append a query like
+  **`https://billwill.site/?v=2`** (confirmed working). It's a `summary` (small
+  thumbnail) card; a wide ~1200×630 `og:image` would give the big banner style.
+
+**Legacy:** `public/Test-Logo.png` (commit `a08b93d`) is superseded by
+`billwill-logo.png`; safe to remove in a later cleanup.
 
 ---
 
@@ -444,8 +463,10 @@ without a token.
   `DEMO_CLERK_USER_ID`, seeded sample data across every feature. Pushed
   (`fde5ea3`). Clerk demo user + Render env var done; API redeployed. 48
   demo-data unit tests + demo integration tests pass.
-- **Logo + favicon**: BillWill logo self-hosted at `/billwill-logo.png`, set as
-  branding logo and the browser-tab favicon (`index.html`). Pushed.
+- **Logo + favicon + social preview**: BillWill logo self-hosted at
+  `/billwill-logo.png`, set as branding logo, browser-tab favicon, and Open
+  Graph `og:image` for WhatsApp/Twitter link previews (`index.html`). Pushed
+  (`e1eeed6`). `?v=2` cache-bust confirmed the WhatsApp preview updates.
 - **Phase 2 (Log a spend + Goals)**: QuickSpend FAB + savings Goals with
   in-plan reservation from Free to spend; demo seeds 4 goals. Pushed (`d5eec0f`),
   Render redeployed. Fixed a CI-only e2e harness crash (Clerk proxy) in
@@ -486,6 +507,8 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+e1eeed6  fix: add og:image and social preview meta tags (WhatsApp/Twitter link preview)
+9578a3a  docs: add Phase 2 (Log a spend + Goals), logo/favicon, and e2e fix to billwill-notes
 ada319b  fix(e2e): define signInTokens stub via Object.defineProperty to bypass Clerk proxy set trap
 d5eec0f  feat: Phase 2 - Log a spend quick entry and savings Goals
 3b81386  fix: use BillWill logo as favicon/tab icon
