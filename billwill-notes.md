@@ -70,6 +70,7 @@ npm run dev                   # web  -> http://localhost:8080
 - `CLIENT_URL` — allowed frontend origin(s), comma-separated, no path. Prod: `https://billwill.site,https://www.billwill.site`
 - `NODE_ENV`, `PORT` (5001), `TRUST_PROXY` (0 local, 1 on Render)
 - `ADMIN_CLERK_USER_IDS` — comma-separated Clerk `user_…` IDs that are always admin
+- `DEMO_CLERK_USER_ID` — the single Clerk `user_…` id for the demo account (see §6c). Optional; enables demo mode when set. **Must not also appear in `ADMIN_CLERK_USER_IDS`** or the API refuses to start.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET` — optional, for logo uploads
 
 The API validates all env vars at boot (`server/src/config/env.ts`) and exits
@@ -232,6 +233,54 @@ databases must add "Savings & investments" (kind Savings) via Admin → Categori
 
 ---
 
+## 6c. Demo account (commit `fde5ea3`)
+
+A shared, resettable demo account so BillWill can be shown to others without
+exposing real data. Full guide in `docs/DEMO.md`.
+
+**How it's gated:** a single Clerk user, identified by the backend env var
+**`DEMO_CLERK_USER_ID`** (`user_…`). When unset, the demo is simply off and the
+app behaves as before. The demo buttons appear only when the API reports it's
+enabled.
+
+- **Must NOT also be in `ADMIN_CLERK_USER_IDS`** — the server refuses to start if
+  the same id is in both. The demo user can never be an admin.
+- Current setup: demo user created in Clerk (e.g. `demo@billwill.site`),
+  `DEMO_CLERK_USER_ID` set on Render, API redeployed. (Done.)
+
+**Visitor experience:**
+- "Try the demo" button on the landing page + "explore the demo account" link on
+  sign-in. One click — no credentials typed.
+- Sign-in uses a Clerk **ticket** (`signIn.create({ strategy: 'ticket' })`); the
+  API issues a 60-second one-time sign-in ticket via a public, rate-limited
+  endpoint (20 / 15 min per IP).
+- A banner on every signed-in page: sample data, shared, reset daily, with
+  **Reset demo data** and **Exit demo** buttons.
+
+**Seeded dataset** (`buildDemoDataset`, pure + unit tested): dates relative to
+"today" so it always looks current. Covers income (counted / uncounted /
+one-time), recurring bills + subscriptions (incl. a cancelled one), installment
+plans (active + completed), paid / part-paid / overdue / due-soon bills, notes,
+payments, budgets in every status (ok/warn/over), and the 50/30/20 split.
+
+**Reset paths:** banner button, Admin → Overview card, automatic when >24h old,
+or `npm run seed:demo` locally (needs `MONGODB_URI` + `DEMO_CLERK_USER_ID` in
+`server/.env`). A reset deletes **only** the demo user's data; a second reset
+within 10s is declined.
+
+**Key files:** `server/src/services/demoService.ts` (build + reset + freshness),
+`server/src/scripts/` (seed script), `src/hooks/useDemo.ts`,
+`src/components/DemoBanner.tsx`, demo login wiring in `Login.tsx` / `Landing.tsx`
+/ `AuthContext.tsx`, `ChunkErrorBoundary` recovery. Tests:
+`src/test/demo-data.test.ts` (48), `src/test/integration/demo.test.ts`, plus a
+fullstack e2e journey.
+
+> **Safety:** the demo account is public and shared — anyone can sign into it and
+> edit/delete its data, visible to the next visitor until reset. Never enter real
+> info. Keep Admin → Users off-screen when presenting (it lists real emails).
+
+---
+
 ## 7. Monthly Flow month logic (recent work)
 
 Two frontend-only changes, built around `src/lib/billMonth.ts` (+ `bill-month.test.ts`):
@@ -295,6 +344,7 @@ every request) or UI grant (stored in MongoDB).
 - **Subscriptions:** `GET/POST /subscriptions`, `GET/PATCH/DELETE /subscriptions/:id`, `PATCH /subscriptions/:id/cancel`
 - **Notifications:** `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/:id/read`, `PATCH /notifications/read-all`, `PATCH /notifications/:id/dismiss`
 - **Budget (Phase 1):** `GET/POST /income-sources`, `PATCH/DELETE /income-sources/:id` (+ received-cycle toggle), `GET/PUT /budgets` (per-category limits), `GET/PATCH /budget-settings` (need/want/savings %). (See `server/src/index.ts` for exact shapes.)
+- **Demo:** `GET /demo/status` (public — is demo enabled / is caller the demo user), `POST /demo/session` (public, rate-limited — returns a 60s Clerk sign-in ticket), `POST /demo/reset` (demo user or admin — re-seeds demo data).
 - **Admin:** `GET /admin/users`, `POST /admin/users/:id/grant-admin`, `POST /admin/users/:id/revoke-admin`, `GET /admin/summary`, `POST/PATCH/DELETE /admin/categories[/:id]` (category `kind`), `POST/PATCH/DELETE /admin/pricing-tiers[/:id]`, `PATCH /admin/branding`, `POST /admin/branding/logo`, `PATCH /admin/site-settings`
 
 Verify API deployed correctly: `GET /api/categories` returns **401** (not 404)
@@ -334,15 +384,25 @@ without a token.
 - **Budget Phase 1**: income sources, per-category budgets, cash-flow card,
   need/want/savings category kinds, chunk-error auto-recovery. Pushed (`e5d6936`).
   Fixed 2 real test-assertion bugs in the delivered set (installments response
-  shape). All 198 integration + Budget unit tests pass.
+  shape). All integration + Budget unit tests pass.
+- **Demo account**: one-click shared/resettable demo gated by
+  `DEMO_CLERK_USER_ID`, seeded sample data across every feature. Pushed
+  (`fde5ea3`). Clerk demo user + Render env var done; API redeployed. 48
+  demo-data unit tests + demo integration tests pass.
 
 ### Pending / to consider
-- **Budget Phase 1 deploy (in progress):** needs **Render redeploy** (new API
-  routes) then Vercel, then add "Savings & investments" (kind Savings) in
-  Admin → Categories.
-- **`deploy-readiness.test.ts` 3 failures are Windows-local only** (CRLF vs LF in
-  render.yaml regexes + a Unix `grep` call). They pass in CI (Linux). Not a bug;
-  left as-is so CI tests aren't weakened.
+- **Verify demo end-to-end** in a private window: Try the demo → banner, Cash
+  Flow card, Budget → Income shows Salary ₹1,00,000. Confirm demo data is
+  isolated from the personal account.
+- **Windows-local test caveats (not bugs, all green in CI):**
+  - `deploy-readiness.test.ts` — 3 failures from CRLF-vs-LF in render.yaml
+    regexes + a Unix `grep` call.
+  - `smoke.spec.ts` "landing renders pricing" — the `₹24L` stat assertion fails
+    locally (Clerk/data timing); verified it fails on clean pre-change HEAD too.
+  - `test:e2e:fullstack` can't start locally — its webServer command
+    (`server/node_modules/.bin/tsx …`) is POSIX-only; runs in CI.
+  - Playwright browsers must be installed locally once: `npx playwright install chromium`.
+  Left all as-is so CI tests (which gate deploys) aren't weakened.
 - **Clerk production instance:** still on dev keys (`pk_test_`/`sk_test_`). Create
   a prod instance + `pk_live_`/`sk_live_`, configure `billwill.site` domain and
   Google OAuth creds before wider rollout.
@@ -365,6 +425,8 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+fde5ea3  feat: one-click demo account with seeded sample data
+44fdf58  docs: add billwill-notes with Budget Phase 1 and full project status
 e5d6936  feat: Budget Phase 1 - income, budgets, cash flow, category kinds (need/want/savings)
 2be5d11  feat: project expected recurring bills into future months in Monthly Flow
 620e43f  feat: scope Monthly Flow to a single month with switcher and carry-over
