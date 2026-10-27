@@ -321,14 +321,23 @@ every request) or UI grant (stored in MongoDB).
 
 ## 9. Logo notes
 
-- The live branding logo is set in **Admin → Branding** (runtime), currently a
-  public S3 object URL that was pasted + saved.
-- `public/Test-Logo.png` is also committed (commit `a08b93d`), so it's served
-  statically at `https://billwill.site/Test-Logo.png`. Could switch the Branding
-  logo URL to this for a more robust, self-hosted source than the test S3 bucket.
+- **Current logo:** `public/billwill-logo.png`, committed (commit `cf120c6`) and
+  served by Vercel at **`https://billwill.site/billwill-logo.png`**. Set as the
+  branding logo by pasting that URL into **Admin → Branding → "…or paste an
+  image URL"** and saving (the server only accepts `https://` logo URLs).
+- Self-hosted from our own domain = more robust than the earlier test S3 object.
+  To change the logo later: replace `public/billwill-logo.png` and push.
+- The branding logo is runtime (stored in the DB `site_settings`, read as
+  `logo_display_url` / `logo_url`); the file in `public/` is just where the URL
+  points.
+- **S3 upload is optional and not configured** — the in-app Upload button needs
+  the four `AWS_*` vars on Render. The pasted-URL path avoids S3 entirely.
 - Logo display sizing is in code:
-  - Dashboard header (`DashboardHeader.tsx`): `h-12`, aspect-preserved, no tinted box.
+  - Dashboard header (`DashboardHeader.tsx`): `w-11 h-11 sm:w-12 sm:h-12`
+    (44/48px, responsive), rounded, outside the tinted box.
   - Landing page (`Landing.tsx`): `h-10 w-auto max-w-[160px]`.
+- Legacy: `public/Test-Logo.png` (commit `a08b93d`) is still in the repo but
+  superseded by `billwill-logo.png`; safe to remove in a later cleanup.
 
 ---
 
@@ -425,6 +434,8 @@ without a token.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+cf120c6  feat: add BillWill logo asset and enlarge dashboard header logo
+4572941  docs: add demo account and DEMO_CLERK_USER_ID to billwill-notes
 fde5ea3  feat: one-click demo account with seeded sample data
 44fdf58  docs: add billwill-notes with Budget Phase 1 and full project status
 e5d6936  feat: Budget Phase 1 - income, budgets, cash flow, category kinds (need/want/savings)
