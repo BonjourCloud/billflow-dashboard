@@ -353,6 +353,39 @@ Opt-in GA4, frontend-only. Full guide in `docs/ANALYTICS.md`.
 
 ---
 
+## 6f. Recurring end dates + API performance (commit `6e5482f`)
+
+Two things in one delivery. **Backend changes → deploy Render before Vercel.**
+Full write-up in `docs/PERFORMANCE.md`.
+
+**Recurring end dates ("Ends" on a recurring bill):** a recurring bill/series
+can now stop after N payments or on an end date (e.g. a loan that runs 12 EMIs).
+- `src/lib/recurrenceEnd.ts` (+ `recurrenceEnd.test.ts`, 9 tests): pure
+  `yyyy-MM-dd`/UTC helpers — `lastPaymentDate(first, day, N)` and
+  `paymentsUntil(first, day, end)`, capped at `MAX_RECURRING_PAYMENTS = 600`
+  (50 yrs). Month-end clamping mirrors the server (31st → last day of short months).
+- UI in `src/components/dashboard/BillDialog.tsx` (the "Ends" choice).
+- Server honors the end in `recurrenceService.ts` / `reminderService.ts` /
+  `index.ts`; integration test `src/test/integration/recurring-end-date.test.ts`
+  (5 tests) against real Mongo.
+
+**API performance:** `warmUpApi()` (in `src/lib/api.ts`, called from `main.tsx`)
+pings the API on load to wake Render's free instance / warm the connection;
+request batching reduces round-trips (`query-batching.test.ts`, 7 tests).
+
+Verified on Node 24 before push: unit 16/16, integration 5/5, app + server
+typecheck clean.
+
+> **NOTE — PWA was NOT included.** The same delivery bundled a separate PWA
+> feature (service worker, manifest, offline page, icons, `src/lib/pwa.ts`), which
+> we intentionally left out per request. Its PWA edits to `index.html`/`vercel.json`
+> had reverted the favicon fix and removed the OG/WhatsApp preview tags, so those
+> were reverted and `registerServiceWorker()` stripped from `main.tsx`. The PWA
+> files (+ `billwill-pwa.zip`) remain **untracked** in the working tree for a
+> future clean PWA commit — must re-apply without clobbering favicon/OG again.
+
+---
+
 ## 7. Monthly Flow month logic (recent work)
 
 Two frontend-only changes, built around `src/lib/billMonth.ts` (+ `bill-month.test.ts`):
@@ -558,8 +591,16 @@ rather than guessing from the text log.
   env var set in Vercel + redeployed.
 - **CI (GitHub Actions)**: 5-job test pipeline (see §11b). Fullstack e2e journey
   stabilized over 4 rounds (see §11c); final root-cause fix `4d95793`.
+- **Recurring end dates + API perf**: "Ends after N / on date" for recurring
+  bills, plus `warmUpApi()` and query batching. Pushed (`6e5482f`); backend, so
+  Render redeployed before Vercel. 16 unit + 5 integration tests pass. (See §6f.)
 
 ### Pending / to consider
+- **PWA feature not yet committed:** service worker, manifest, offline page,
+  icons, `src/lib/pwa.ts` (+ `billwill-pwa.zip`) are untracked in the working
+  tree. When committing, re-apply the `index.html`/`vercel.json` PWA bits
+  WITHOUT reverting the favicon (`billwill-logo.png`) or the OG/Twitter preview
+  tags, and re-add `registerServiceWorker()` to `main.tsx`.
 - **CI/CD gap:** CI (GitHub Actions) and deploys (Vercel/Render) are not linked —
   a red CI run does not block a deploy. For real CI/CD, gate deploys on green
   (Vercel required checks, or a deploy job triggered only after tests pass).
@@ -597,6 +638,8 @@ rather than guessing from the text log.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+6e5482f  feat: recurring bill end dates and API performance (query batching, warm-up)
+d3ff823  docs: add CI (GitHub Actions) overview, e2e fix saga, and CI/CD gap
 4d95793  fix(e2e): dismiss calendar popover before clicking Add Bill
 a59faac  fix(e2e): scope bill row to table, relax goal assertions, add actionTimeout
 602a3ae  docs: add Google Analytics (6e), env var, and the e2e in-place/calendar fix
