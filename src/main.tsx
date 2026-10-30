@@ -6,6 +6,7 @@ import { resolveClerkPublishableKey } from "./lib/clerkPublishableKey";
 import { installChunkErrorReload } from "./lib/chunkReload";
 import { initAnalytics } from "./lib/analytics";
 import { warmUpApi } from "./lib/api";
+import { registerServiceWorker } from "./lib/pwa";
 import "./index.css";
 
 const clerkPublishableKey = resolveClerkPublishableKey(
@@ -15,6 +16,7 @@ const clerkPublishableKey = resolveClerkPublishableKey(
 installChunkErrorReload();
 initAnalytics(import.meta.env.VITE_GA_MEASUREMENT_ID);
 warmUpApi();
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <ClerkProvider publishableKey={clerkPublishableKey}>
