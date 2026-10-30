@@ -594,6 +594,9 @@ rather than guessing from the text log.
 - **Recurring end dates + API perf**: "Ends after N / on date" for recurring
   bills, plus `warmUpApi()` and query batching. Pushed (`6e5482f`); backend, so
   Render redeployed before Vercel. 16 unit + 5 integration tests pass. (See §6f.)
+- **Row action buttons (edit/delete)**: shared `src/components/RowActions.tsx`
+  used across bill + subscription tables and the notification bell. Frontend-only.
+  Pushed (`399ccf4`); `row-actions.test.tsx` added.
 
 ### Pending / to consider
 - **PWA feature not yet committed:** service worker, manifest, offline page,
@@ -638,6 +641,8 @@ rather than guessing from the text log.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+399ccf4  fix: row action buttons (edit, delete) across bill and subscription tables
+446d0bd  docs: add recurring end dates + API perf (6f); note PWA still pending
 6e5482f  feat: recurring bill end dates and API performance (query batching, warm-up)
 d3ff823  docs: add CI (GitHub Actions) overview, e2e fix saga, and CI/CD gap
 4d95793  fix(e2e): dismiss calendar popover before clicking Add Bill
