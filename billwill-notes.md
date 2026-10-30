@@ -589,10 +589,17 @@ the *test code*, not the app:
 - `4d95793` — **root cause**: the calendar popover stayed open and covered the
   "Add Bill" button, so the submit click never landed. Now dismisses the popover
   (click the dialog heading) before submitting.
+- `5167e3c` — two stale selectors after the row-actions + Bill Hub changes:
+  (1) subscription cancel used `getByTitle("Cancel subscription")`, but
+  `RowActions` labels it `Cancel <name>` → match the button "Cancel Music
+  Premium"; (2) the bill journey used `getByRole("row")`, which doesn't exist in
+  the **mobile** `<ul aria-label="Bills">` card layout → match desktop row OR
+  mobile card via `.or()`. **CI green after this (all 5 jobs pass).**
 
 Lesson captured: these only reproduce in CI (Linux + MongoDB + real browser);
 grab the uploaded **Playwright trace artifact** from the failed job to diagnose,
-rather than guessing from the text log.
+rather than guessing from the text log. Watch for test selectors going stale
+whenever a component's labels or desktop/mobile markup change.
 
 ---
 
@@ -647,6 +654,8 @@ rather than guessing from the text log.
 - **Bill Hub "Show more" pagination**: `BillTable.tsx` shows 25 rows
   (`BILLS_PAGE_SIZE`) and a "Show N more" button; resets to page 1 on any
   search/filter/sort change. Frontend-only. Pushed (`b087175`).
+- **E2e selectors fixed** (`5167e3c`): subscription cancel + mobile bill row;
+  CI "Full-stack browser journeys" green again. (See §11c.)
 
 ### Pending / to consider
 - **Recurring `categories.test.ts` regression:** incoming deliveries keep
@@ -690,6 +699,8 @@ rather than guessing from the text log.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+5167e3c  fix(e2e): match RowActions cancel label and mobile bill-card layout
+866226b  docs: add Bill Hub smart sort + show-more pagination to notes
 b087175  feat: Show more pagination for Bill Hub table (25 rows per page)
 fa0589a  feat: Bill Hub smart priority sort (overdue -> next due -> paid)
 8cee4a1  feat: duplicate-bill warning and allow earlier/past-dated recurring payments
