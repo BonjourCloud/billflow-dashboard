@@ -15,7 +15,8 @@ import { Bill, BillStatus, BillCategory, STATUSES } from '@/data/bills';
 import { useCategories } from '@/hooks/useCategories';
 import { apiRequest } from '@/lib/api';
 import type { Subscription } from '@/data/subscriptions';
-import { lastPaymentDate, paymentsUntil, MAX_RECURRING_PAYMENTS } from '@/lib/recurrenceEnd';
+import { Checkbox } from '@/components/ui/checkbox';
+import { lastPaymentDate, paymentsUntil, earlierPaymentCount, MAX_RECURRING_PAYMENTS } from '@/lib/recurrenceEnd';
 
 interface BillDialogProps {
   open: boolean;
@@ -49,6 +50,8 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
   const [endCount, setEndCount] = useState('12');
   const [endDateStr, setEndDateStr] = useState('');
   const endTouched = useRef(false);
+  // New recurring bill that started in the past: record earlier payments as paid.
+  const [markPastPaid, setMarkPastPaid] = useState(true);
   // Close each calendar as soon as a day is picked.
   const [duePickerOpen, setDuePickerOpen] = useState(false);
   const [endPickerOpen, setEndPickerOpen] = useState(false);
@@ -90,6 +93,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
     setEndMode('never');
     setEndCount('12');
     setEndDateStr('');
+    setMarkPastPaid(true);
   }, [bill, open]);
 
   // When editing, show the series' current end date once it has loaded, unless
@@ -119,6 +123,20 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
     computedEndDate && dueDate && recurringDay
       ? paymentsUntil(dueDate, recurringDay, computedEndDate)
       : 0;
+
+  // A loan entered with its real start date: how many EMIs are already behind it.
+  const earlierPayments =
+    !bill && recurrenceType === 'recurring' && dueDate && recurringDay
+      ? earlierPaymentCount(dueDate, recurringDay, new Date().toISOString().slice(0, 10), computedEndDate)
+      : 0;
+  const earlierRange =
+    earlierPayments > 0 && dueDate && recurringDay
+      ? (() => {
+          const last = lastPaymentDate(dueDate, recurringDay, earlierPayments);
+          const fmt = (iso: string) => format(parse(iso, 'yyyy-MM-dd', new Date()), 'MMM yyyy');
+          return last ? `${fmt(dueDate)} to ${fmt(last)}` : '';
+        })()
+      : '';
 
   const initialDueDateStr = bill?.dueDate
     ? new Date(bill.dueDate).toISOString().split('T')[0]
@@ -161,7 +179,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
     setSubmitting(true);
 
     const isRec = recurrenceType === 'recurring';
-    const data: Omit<Bill, '_id'> & { recurringDay?: number; updateScope?: 'this' | 'future'; endDate?: string | null } = {
+    const data: Omit<Bill, '_id'> & { recurringDay?: number; updateScope?: 'this' | 'future'; endDate?: string | null; markPastPaid?: boolean } = {
       name,
       amount: Number(amount),
       dueDate,
@@ -170,6 +188,7 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
       isSubscription: isRec,
       recurrenceType,
       ...(isRec && recurringDay ? { recurringDay } : {}),
+      ...(!bill && isRec && earlierPayments > 0 && markPastPaid ? { markPastPaid: true } : {}),
       // New bill: send an end date only when one is set. Edit: send it only when
       // it changed (null clears an existing end).
       ...(isRec && (bill ? computedEndDate !== seriesEndIso : computedEndDate)
@@ -191,11 +210,12 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-card border-border/40 sm:max-w-[480px] sm:rounded-3xl">
+      <DialogContent className="glass-card border-border/40 sm:max-w-[480px] sm:rounded-3xl flex max-h-[92dvh] flex-col gap-0 p-5 sm:p-6">
         <DialogHeader>
           <DialogTitle>{bill ? 'Edit Bill' : 'Add New Bill'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit} className="mt-3 flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-0.5 pb-1">
           {/* Bill Schedule Type (One-time vs Recurring) */}
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -408,7 +428,28 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          {earlierPayments > 0 && (
+            <div className="rounded-2xl border border-border/40 bg-secondary/40 p-3">
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  id="mark-past-paid"
+                  checked={markPastPaid}
+                  onCheckedChange={(v) => setMarkPastPaid(v === true)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="mark-past-paid" className="text-xs font-normal leading-snug cursor-pointer">
+                  <span className="font-semibold text-foreground">
+                    Mark the {earlierPayments} earlier {earlierPayments === 1 ? 'payment' : 'payments'} as already paid
+                  </span>
+                  <span className="block text-muted-foreground mt-0.5">
+                    {earlierRange}. Untick to track them as overdue instead.
+                  </span>
+                </Label>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={status} onValueChange={v => setStatus(v as BillStatus)}>
@@ -476,7 +517,9 @@ export function BillDialog({ open, onOpenChange, bill, onSave, onUpdate, isPendi
             )
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          </div>
+
+          <div className="mt-3 flex justify-end gap-3 border-t border-border/20 pt-3">
             <Button
               type="button"
               variant="outline"

@@ -614,6 +614,10 @@ A tab left open across a release can request a lazy chunk that no longer exists.
 
 **Row actions.** Edit, delete and cancel buttons in the bill table, subscriptions table and notification list are always visible (hover-only controls cannot be found on touch screens). Below 768 px the bill and subscription lists render as cards (`useIsMobile()`, one DOM tree at a time) with 40 px touch targets; each button has an `aria-label` and tooltip. Shared component: `src/components/RowActions.tsx`.
 
+**Duplicate bills.** `POST /api/bills` calls `findDuplicateBill` before creating anything. A duplicate is the same user, name (case and accent-insensitive, trimmed), amount and UTC due day; for a recurring bill an active `RecurringSeries` with the same name and amount also counts. The server answers `409` with `code: "DUPLICATE_BILL"`. The client (`ApiError` in `src/lib/api.ts`) keeps the bill, shows `DuplicateBillDialog`, and on "Add anyway" resends it with `allowDuplicate: true`. Editing a bill is not checked. Category is deliberately not part of the match.
+
+**Loans already under way.** A recurring bill whose first due date is in the past normally materializes the earlier months as `overdue`. With `markPastPaid: true` the server (`createRecurringSeriesWithOccurrences`) creates the first bill as `paid` and, after generating the cycles, flips every `overdue` occurrence of that series due before today (UTC) to `paid`. The form shows the option only when adding such a bill and pre-ticks it. No payment records are created: the paid bills count in totals through the legacy-paid rule, and the bill detail page shows no payment history for them. Later months appear automatically as the calendar moves (generation looks one month ahead). The bill dialog is a flex column: fields scroll and the Cancel / Save row stays pinned, so it fits short screens.
+
 ## 8. Data design
 
 ### 8.1 Entity relationships

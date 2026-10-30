@@ -109,6 +109,7 @@ describe("Admin-managed categories through the real API", () => {
       ...billBody("car-emi"),
       recurrenceType: "recurring",
       recurringDay: 5,
+      allowDuplicate: true, // same name, amount and date as the bill above
     });
     expect(recurring.status, JSON.stringify(recurring.body)).toBe(201);
 
@@ -171,7 +172,9 @@ describe("Admin-managed categories through the real API", () => {
     ).toBe(400);
 
     await admin.patch(`/api/admin/categories/${car.body.id}`, { is_active: true });
-    expect((await alice.post("/api/bills", billBody("car-emi"))).status).toBe(201);
+    expect(
+      (await alice.post("/api/bills", { ...billBody("car-emi"), allowDuplicate: true })).status,
+    ).toBe(201);
   });
 
   it("renames and recolors without changing the slug", async () => {

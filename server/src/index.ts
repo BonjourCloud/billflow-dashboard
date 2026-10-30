@@ -156,6 +156,7 @@ import {
   createPricingTierSchema,
   updatePricingTierSchema,
 } from "./models/PricingTier.js";
+import { findDuplicateBill } from "./services/duplicateService.js";
 
 // Number of reverse-proxy hops to trust for req.ip (e.g. 1 on Render). Left at
 // 0 by default so clients cannot spoof X-Forwarded-For to dodge rate limits.
@@ -1934,6 +1935,10 @@ export const billBodySchema = z
     recurringDay: z.number().int().min(1).max(31).optional(),
     // Date of the last payment of a recurring bill (e.g. the 12th EMI of a loan).
     endDate: billEndDateSchema.optional(),
+    // Set by the app after the user confirms "add anyway" on a duplicate warning.
+    allowDuplicate: z.boolean().optional(),
+    // New recurring bill that started in the past: mark earlier payments as paid.
+    markPastPaid: z.boolean().optional(),
   })
   .strict()
   .transform((data) => {
@@ -2051,6 +2056,11 @@ app.post("/api/bills", async (req, res) => {
       return res.status(400).json({ error: categoryProblem });
     }
 
+    if (parsed.data.markPastPaid && parsed.data.recurrenceType !== "recurring") {
+      return res
+        .status(400)
+        .json({ error: "Earlier payments only apply to recurring bills." });
+    }
     if (parsed.data.endDate && parsed.data.recurrenceType !== "recurring") {
       return res
         .status(400)
@@ -2065,6 +2075,25 @@ app.post("/api/bills", async (req, res) => {
         .json({ error: "End date cannot be before the first due date." });
     }
 
+    if (!parsed.data.allowDuplicate) {
+      const duplicate = await findDuplicateBill(userId, {
+        name: parsed.data.name,
+        amount: parsed.data.amount,
+        dueDate: parsed.data.dueDate,
+        recurring: parsed.data.recurrenceType === "recurring",
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          error:
+            duplicate.kind === "recurring"
+              ? `You already have an active recurring bill "${duplicate.name}" for this amount.`
+              : `"${duplicate.name}" for this amount is already due on this date.`,
+          code: "DUPLICATE_BILL",
+          duplicate,
+        });
+      }
+    }
+
     if (parsed.data.recurrenceType === "recurring") {
       const { primaryBill } = await createRecurringSeriesWithOccurrences(
         userId,
@@ -2076,6 +2105,7 @@ app.post("/api/bills", async (req, res) => {
           recurringDay: parsed.data.recurringDay,
           initialStatus: parsed.data.status,
           endDate: parsed.data.endDate ?? null,
+          markPastPaid: parsed.data.markPastPaid ?? false,
         },
       );
       return res.status(201).json(primaryBill);

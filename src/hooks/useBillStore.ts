@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bill, BillStatus, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
 import type { Subscription } from '@/data/subscriptions';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, ApiError } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   MonthKey,
@@ -128,11 +128,23 @@ export function useBillStore() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // A bill the server flagged as a likely duplicate, held until the user decides.
+  const [duplicate, setDuplicate] = useState<{
+    bill: Omit<Bill, '_id'>;
+    message: string;
+  } | null>(null);
+
   const addMutation = useMutation({
-    mutationFn: (newBill: Omit<Bill, '_id'>) =>
+    mutationFn: ({
+      bill: newBill,
+      allowDuplicate,
+    }: {
+      bill: Omit<Bill, '_id'>;
+      allowDuplicate?: boolean;
+    }) =>
       apiRequest<Bill>('/api/bills', {
         method: 'POST',
-        body: JSON.stringify(newBill),
+        body: JSON.stringify(allowDuplicate ? { ...newBill, allowDuplicate: true } : newBill),
       }),
     onSuccess: () => {
       toast.success('Bill added successfully');
@@ -142,7 +154,11 @@ export function useBillStore() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['installments'] });
     },
-    onError: (err: Error) => {
+    onError: (err: Error, variables) => {
+      if (err instanceof ApiError && err.code === 'DUPLICATE_BILL') {
+        setDuplicate({ bill: variables.bill, message: err.message });
+        return;
+      }
       toast.error(err.message || 'Failed to add bill');
     },
   });
@@ -255,8 +271,16 @@ export function useBillStore() {
   );
 
   const addBill = useCallback((bill: Omit<Bill, '_id'>) => {
-    addMutation.mutate(bill);
+    addMutation.mutate({ bill });
   }, [addMutation]);
+
+  const confirmDuplicate = useCallback(() => {
+    if (!duplicate) return;
+    addMutation.mutate({ bill: duplicate.bill, allowDuplicate: true });
+    setDuplicate(null);
+  }, [addMutation, duplicate]);
+
+  const dismissDuplicate = useCallback(() => setDuplicate(null), []);
 
   const updateBill = useCallback(
     (
@@ -294,6 +318,9 @@ export function useBillStore() {
     searchQuery,
     setSearchQuery,
     addBill,
+    duplicate,
+    confirmDuplicate,
+    dismissDuplicate,
     updateBill,
     deleteBill,
     isLoading,

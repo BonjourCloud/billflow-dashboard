@@ -30,6 +30,18 @@ export function warmUpApi(
   return true;
 }
 
+/** Error from the API that keeps the HTTP status and any machine-readable code. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 type TokenProvider = () => Promise<string | null>;
 
 let tokenProvider: TokenProvider | null = null;
@@ -82,17 +94,23 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const raw = await response.text();
     let message = raw;
+    let code: string | undefined;
     try {
       const parsed = JSON.parse(raw);
       if (typeof parsed?.error === "string") {
         message = parsed.error;
       }
+      if (typeof parsed?.code === "string") {
+        code = parsed.code;
+      }
     } catch {
       // Not JSON, keep raw text
     }
 
-    throw new Error(
+    throw new ApiError(
       message || `API request failed with status ${response.status}.`,
+      response.status,
+      code,
     );
   }
 

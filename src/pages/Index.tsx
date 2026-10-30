@@ -7,6 +7,7 @@ import { UpcomingBillsWidget } from '@/components/dashboard/UpcomingBillsWidget'
 import { AIInsightsWidget } from '@/components/dashboard/AIInsightsWidget';
 import { BillTable } from '@/components/dashboard/BillTable';
 import { BillDialog } from '@/components/dashboard/BillDialog';
+import { DuplicateBillDialog } from '@/components/dashboard/DuplicateBillDialog';
 import { CashFlowCard } from '@/components/dashboard/CashFlowCard';
 import { useIncome, useBudgetSettings } from '@/hooks/useBudget';
 import { useGoals } from '@/hooks/useGoals';
@@ -104,6 +105,11 @@ const Index = () => {
         onSave={store.addBill}
         onUpdate={store.updateBill}
         isPending={store.isAdding || store.isUpdating}
+      />
+      <DuplicateBillDialog
+        message={store.duplicate?.message ?? null}
+        onConfirm={store.confirmDuplicate}
+        onCancel={store.dismissDuplicate}
       />
     </div>
   );

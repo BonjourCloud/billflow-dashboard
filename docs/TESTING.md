@@ -58,6 +58,8 @@ They cover:
 - recurring end date: the Nth payment date and the payment count between two dates, including month-end days and leap years (`recurrenceEnd.test.ts`);
 - query counts: the recurring-bill and reminder generators use a fixed small number of database calls however many months or bills there are (`query-batching.test.ts`, models mocked);
 - row actions: Edit/Delete/Cancel buttons are always rendered with an accessible name and never hidden behind hover (`row-actions.test.tsx`);
+- duplicate bills: the matching rules (`duplicate-service.test.ts`, models mocked) and the 409 / `allowDuplicate` flow against a real database (`integration/duplicate-bills.test.ts`, needs MongoDB, runs in CI);
+- loans already under way: `earlierPaymentCount` (`recurrenceEnd.test.ts`) and the paid-versus-overdue result against a real database (`integration/recurring-past-paid.test.ts`, runs in CI);
 - Google Analytics loader (off without an ID, rejects bad IDs, one script, Do Not Track, `analytics.test.ts`) and PWA registration and manifest (`pwa.test.ts`);
 - demo data: the generated dataset is checked on five different dates for the 50%-of-income rule, no past-dated pending bills except the one intentional overdue bill, every app feature being represented, and reset determinism (`demo-data.test.ts`).
 

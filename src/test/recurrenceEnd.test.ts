@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lastPaymentDate, paymentsUntil, MAX_RECURRING_PAYMENTS } from '@/lib/recurrenceEnd';
+import { lastPaymentDate, paymentsUntil, earlierPaymentCount, MAX_RECURRING_PAYMENTS } from '@/lib/recurrenceEnd';
 
 describe('lastPaymentDate', () => {
   it('counts the first due date as payment 1', () => {
@@ -58,5 +58,29 @@ describe('paymentsUntil', () => {
 
   it('stays bounded for a far-future end date', () => {
     expect(paymentsUntil('2026-11-05', 5, '9999-12-31')).toBeGreaterThan(MAX_RECURRING_PAYMENTS);
+  });
+});
+
+describe('earlierPaymentCount', () => {
+  it('counts a loan that started in March as 8 payments behind it by 30 Oct', () => {
+    // Mar, Apr, May, Jun, Jul, Aug, Sep, Oct (5th of each month)
+    expect(earlierPaymentCount('2026-03-05', 5, '2026-10-30')).toBe(8);
+  });
+
+  it('does not count a payment due today or later', () => {
+    expect(earlierPaymentCount('2026-03-05', 5, '2026-10-05')).toBe(7);
+    expect(earlierPaymentCount('2026-03-05', 5, '2026-10-06')).toBe(8);
+  });
+
+  it('is 0 for a start date in the future', () => {
+    expect(earlierPaymentCount('2026-11-05', 5, '2026-10-30')).toBe(0);
+  });
+
+  it('stops at the end date when the series has already finished', () => {
+    expect(earlierPaymentCount('2026-03-05', 5, '2026-10-30', '2026-05-05')).toBe(3);
+  });
+
+  it('returns 0 for invalid dates', () => {
+    expect(earlierPaymentCount('nope', 5, '2026-10-30')).toBe(0);
   });
 });

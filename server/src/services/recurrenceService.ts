@@ -287,6 +287,11 @@ export async function createRecurringSeriesWithOccurrences(
     initialStatus?: "paid" | "pending" | "overdue";
     /** Date of the last payment (inclusive). Omit or null for an ongoing series. */
     endDate?: Date | null;
+    /**
+     * For a series that started in the past (e.g. a loan already 8 EMIs in):
+     * record every payment due before today as paid instead of overdue.
+     */
+    markPastPaid?: boolean;
   },
   referenceDate: Date = new Date(),
 ): Promise<{ series: RecurringSeriesDocument; primaryBill: BillDocument }> {
@@ -318,7 +323,9 @@ export async function createRecurringSeriesWithOccurrences(
 
   const isInitialPastDue = data.dueDate.getTime() < refTimeMidnightUtc;
   const resolvedStatus =
-    data.initialStatus ?? (isInitialPastDue ? "overdue" : "pending");
+    data.markPastPaid && isInitialPastDue
+      ? "paid"
+      : (data.initialStatus ?? (isInitialPastDue ? "overdue" : "pending"));
 
   // Create initial occurrence with the requested or past-due determined status
   const primaryBill = await Bill.create({
@@ -336,6 +343,19 @@ export async function createRecurringSeriesWithOccurrences(
 
   // Materialize any remaining due cycles up to horizon
   await generateDueOccurrencesForUser(userId, referenceDate);
+
+  if (data.markPastPaid) {
+    // The materialized earlier cycles start out overdue; they were already paid.
+    await Bill.updateMany(
+      {
+        userId,
+        seriesId: series._id,
+        status: "overdue",
+        dueDate: { $lt: new Date(refTimeMidnightUtc) },
+      },
+      { $set: { status: "paid" } },
+    );
+  }
 
   return { series: series.toObject(), primaryBill: primaryBill.toObject() };
 }

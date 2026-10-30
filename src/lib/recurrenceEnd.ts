@@ -82,3 +82,22 @@ export function paymentsUntil(
   }
   return count;
 }
+
+/**
+ * How many payments of a monthly series are already due before `today`
+ * (a 'yyyy-MM-dd' date, UTC like the server), stopping at `endDate` when the
+ * series ends sooner. Used to offer "mark earlier payments as paid" for a loan
+ * that started months ago.
+ */
+export function earlierPaymentCount(
+  firstDueDate: string,
+  recurringDay: number,
+  today: string,
+  endDate: string | null = null,
+): number {
+  const t = parseIso(today);
+  if (!t) return 0;
+  const yesterday = toIso(Date.UTC(t.year, t.month, t.day) - 24 * 60 * 60 * 1000);
+  const limit = endDate && endDate < yesterday ? endDate : yesterday;
+  return paymentsUntil(firstDueDate, recurringDay, limit);
+}
