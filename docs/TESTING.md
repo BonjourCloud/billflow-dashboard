@@ -55,6 +55,9 @@ They cover:
 - stale-deploy reload guard (`chunk-reload.test.ts`);
 - budgeting: income occurrences (month-end clamping, end dates, one-time, inactive), cash flow and EMI ratio, budget row status, needs/wants/savings summaries, and the income, budget-limit and budget-settings schemas (`budget-cashflow.test.ts`).
 - savings goals: months and suggested monthly amount (₹1,35,000 over four months is ₹33,750, rounded up), the browser and server agreeing on that maths, the reserve in a month, pace and goal states, the effect on Free to spend, and request validation (`goals.test.ts`);
+- recurring end date: the Nth payment date and the payment count between two dates, including month-end days and leap years (`recurrenceEnd.test.ts`);
+- query counts: the recurring-bill and reminder generators use a fixed small number of database calls however many months or bills there are (`query-batching.test.ts`, models mocked);
+- Google Analytics loader (off without an ID, rejects bad IDs, one script, Do Not Track, `analytics.test.ts`) and PWA registration and manifest (`pwa.test.ts`);
 - demo data: the generated dataset is checked on five different dates for the 50%-of-income rule, no past-dated pending bills except the one intentional overdue bill, every app feature being represented, and reset determinism (`demo-data.test.ts`).
 
 These tests do **not** connect to MongoDB: database calls are mocked or simulated in memory.
@@ -82,6 +85,7 @@ They verify:
 - income, budget limits and budget settings: CRUD, per-user isolation, received-cycle toggling, and validation (`budget.test.ts`);
 - core features through the real routes: bill CRUD, payment history and notes, recurring bills with `this`/`future`/`all` scopes, subscription generation without duplicates under concurrent loads, reminders (one per bill and type, read/read-all/dismiss, cleared on payment or deletion), installment update/cancel, pricing-tier and theme validation, admin summary, and generic `500`s without leaking internals when the database fails (`core-features.test.ts`).
 - goals and Log a spend: create with a planned monthly amount, re-plan on a new target, validation, contributions (sum, remove, 10 at once without loss, the 500 limit), per-user isolation, and a spend stored as a paid one-time bill (`goals.test.ts`);
+- recurring bills with an end date: no bills after the last payment, ongoing bills keep generating, invalid end dates rejected, changing or clearing an end date on a series removes only the pending payments after it (`recurring-end-date.test.ts`);
 - demo account: status/session/reset endpoints, 404 when disabled, rate limit, reset touches only the demo user's data, demo user is never admin (`demo.test.ts`).
 
 **First run:** `mongodb-memory-server` downloads a MongoDB binary (around 100 MB) into `node_modules/.cache/mongodb-memory-server/`. Later runs reuse it until `node_modules` is reinstalled. CI skips the install-time download (`MONGOMS_DISABLE_POSTINSTALL=1`) and caches that directory, keyed on `package-lock.json`.

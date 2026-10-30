@@ -200,6 +200,14 @@ export async function generateDueOccurrencesForUser(
     referenceDate.getUTCDate(),
   );
 
+  // Work out every cycle that should exist, then look up which ones already do
+  // in ONE query. (This runs on every bills, subscriptions and notifications
+  // request, so a lookup per cycle meant dozens of database round trips per
+  // page load for a series that started a year or two ago.)
+  const candidates: Array<{
+    series: (typeof activeSeries)[number];
+    cycle: CycleDefinition;
+  }> = [];
   for (const series of activeSeries) {
     const cycles = getDueCycles(
       series.startDate,
@@ -207,51 +215,58 @@ export async function generateDueOccurrencesForUser(
       series.endDate ?? null,
       referenceDate,
     );
-
     const skippedSet = new Set(series.skippedCycles || []);
-
     for (const cycle of cycles) {
-      if (skippedSet.has(cycle.billingCycle)) {
-        continue;
+      if (!skippedSet.has(cycle.billingCycle)) {
+        candidates.push({ series, cycle });
       }
+    }
+  }
 
-      // Check if bill occurrence already exists
-      const existing = await Bill.findOne({
+  if (candidates.length === 0) {
+    return { createdCount: 0 };
+  }
+
+  const existingBills = await Bill.find({
+    userId,
+    seriesId: { $in: activeSeries.map((series) => series._id) },
+    billingCycle: { $in: [...new Set(candidates.map((c) => c.cycle.billingCycle))] },
+  })
+    .select("seriesId billingCycle")
+    .lean();
+  const existingKeys = new Set(
+    existingBills.map((bill) => `${String(bill.seriesId)}:${bill.billingCycle}`),
+  );
+
+  for (const { series, cycle } of candidates) {
+    if (existingKeys.has(`${String(series._id)}:${cycle.billingCycle}`)) {
+      continue;
+    }
+
+    const isPastDue = cycle.dueDate.getTime() < refTimeMidnightUtc;
+    const status = isPastDue ? "overdue" : "pending";
+
+    try {
+      await Bill.create({
+        userId,
+        name: series.name,
+        amount: series.amount,
+        dueDate: cycle.dueDate,
+        status,
+        category: series.category,
+        isSubscription: true,
+        recurrenceType: "recurring",
         seriesId: series._id,
         billingCycle: cycle.billingCycle,
-      })
-        .select("_id")
-        .lean();
-
-      if (existing) {
+      });
+      createdCount++;
+    } catch (error: unknown) {
+      // Handle MongoDB E11000 duplicate key race gracefully
+      const mongoError = error as { code?: number };
+      if (mongoError?.code === 11000) {
         continue;
       }
-
-      const isPastDue = cycle.dueDate.getTime() < refTimeMidnightUtc;
-      const status = isPastDue ? "overdue" : "pending";
-
-      try {
-        await Bill.create({
-          userId,
-          name: series.name,
-          amount: series.amount,
-          dueDate: cycle.dueDate,
-          status,
-          category: series.category,
-          isSubscription: true,
-          recurrenceType: "recurring",
-          seriesId: series._id,
-          billingCycle: cycle.billingCycle,
-        });
-        createdCount++;
-      } catch (error: unknown) {
-        // Handle MongoDB E11000 duplicate key race gracefully
-        const mongoError = error as { code?: number };
-        if (mongoError?.code === 11000) {
-          continue;
-        }
-        throw error;
-      }
+      throw error;
     }
   }
 
@@ -270,6 +285,8 @@ export async function createRecurringSeriesWithOccurrences(
     dueDate: Date;
     recurringDay?: number;
     initialStatus?: "paid" | "pending" | "overdue";
+    /** Date of the last payment (inclusive). Omit or null for an ongoing series. */
+    endDate?: Date | null;
   },
   referenceDate: Date = new Date(),
 ): Promise<{ series: RecurringSeriesDocument; primaryBill: BillDocument }> {
@@ -283,6 +300,7 @@ export async function createRecurringSeriesWithOccurrences(
     frequency: "monthly",
     recurringDay,
     startDate: data.dueDate,
+    endDate: data.endDate ?? null,
     isActive: true,
     skippedCycles: [],
   });
@@ -320,6 +338,47 @@ export async function createRecurringSeriesWithOccurrences(
   await generateDueOccurrencesForUser(userId, referenceDate);
 
   return { series: series.toObject(), primaryBill: primaryBill.toObject() };
+}
+
+/**
+ * Sets (or clears, with null) the date of a series' last payment. Pending
+ * occurrences after the new end date are removed so the dashboard and the
+ * reminders stop showing payments that will no longer happen; paid and
+ * earlier occurrences are never touched. Clearing the end date lets the series
+ * generate occurrences again.
+ */
+export async function setSeriesEndDate(
+  userId: string,
+  seriesId: unknown,
+  endDate: Date | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const series = await RecurringSeries.findOne({ _id: seriesId, userId });
+  if (!series) {
+    return { ok: false, error: "Recurring series not found." };
+  }
+  if (endDate && endDate.getTime() < series.startDate.getTime()) {
+    return { ok: false, error: "End date cannot be before the first due date." };
+  }
+
+  await RecurringSeries.updateOne({ _id: series._id, userId }, { $set: { endDate } });
+
+  if (endDate) {
+    const beyondEnd = await Bill.find({
+      userId,
+      seriesId: series._id,
+      status: "pending",
+      dueDate: { $gt: endDate },
+    })
+      .select("_id")
+      .lean();
+    if (beyondEnd.length > 0) {
+      const ids = beyondEnd.map((bill) => bill._id);
+      await Bill.deleteMany({ _id: { $in: ids }, userId });
+      await Notification.deleteMany({ userId, billId: { $in: ids } });
+    }
+  }
+
+  return { ok: true };
 }
 
 /**

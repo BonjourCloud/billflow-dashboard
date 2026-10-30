@@ -6,6 +6,30 @@ const API_BASE_URL = resolveApiBaseUrl(
   import.meta.env.PROD,
 );
 
+/**
+ * Wakes a sleeping API. The free Render instance sleeps when idle and takes
+ * tens of seconds to start, so firing a throwaway request as soon as the app
+ * opens (while Clerk and the page scripts are still loading) means the server is
+ * usually awake by the time the first real request is sent. Production only;
+ * never throws and ignores the response.
+ */
+export function warmUpApi(
+  isProduction: boolean = import.meta.env.PROD,
+  fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+): boolean {
+  if (!isProduction) return false;
+  try {
+    void fetchImpl(`${API_BASE_URL}/api/ready`, {
+      mode: "no-cors",
+      cache: "no-store",
+      credentials: "omit",
+    }).catch(() => undefined);
+  } catch {
+    // Warming is best effort.
+  }
+  return true;
+}
+
 type TokenProvider = () => Promise<string | null>;
 
 let tokenProvider: TokenProvider | null = null;

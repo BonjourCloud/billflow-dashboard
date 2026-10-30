@@ -606,6 +606,12 @@ A tab left open across a release can request a lazy chunk that no longer exists.
 
 ---
 
+### 7.6 Installable app and analytics
+
+**Installable app (PWA).** `public/manifest.webmanifest`, the icons in `public/icons/`, `public/sw.js` and `public/offline.html` make BillWill installable on Android Chrome (see [PWA.md](PWA.md)). The service worker is deliberately small: page loads go to the network first (a new deploy is never hidden behind a stale page) and fall back to the offline screen; it caches only same-origin hashed `/assets/*` and `/icons/*`, and never touches the API, Clerk, analytics or any non-GET request. `registerServiceWorker()` runs in production builds only.
+
+**Google Analytics 4.** `initAnalytics()` (`src/lib/analytics.ts`) loads `gtag.js` only when `VITE_GA_MEASUREMENT_ID` is set at build time (Vercel Production only), skips browsers sending Do Not Track, and validates the ID. Page views on route changes come from GA4 Enhanced measurement; the only custom event is `demo_started`. No amounts, bill names, emails or user IDs are sent. See [ANALYTICS.md](ANALYTICS.md).
+
 ## 8. Data design
 
 ### 8.1 Entity relationships
@@ -793,9 +799,11 @@ Status is a stored field, not recomputed by a timer (there is no scheduler). It 
 
 A `RecurringSeries` represents a subscription. `generateDueOccurrencesForUser` runs whenever the user lists bills, subscriptions or notifications:
 
-1. For each active series, compute the billing cycles (`YYYY-MM`) from the start date up to **next month**.
+1. For each active series, compute the billing cycles (`YYYY-MM`) from the start date up to **next month**, or up to the series' **end date** if it has one.
 2. For each cycle, the due date is `recurringDay` in that month, clamped to the month's last day (31 → 28/29/30).
-3. Insert missing occurrences; the unique series-and-cycle index makes this safe under concurrency.
+3. Find which of those cycles already exist with **one** query (not one per cycle) and insert only the missing ones; the unique series-and-cycle index makes this safe under concurrency.
+
+**End date.** A series can end after its last payment (for example the 12th EMI of a loan). `endDate` is that last payment date, inclusive. The Add Bill form offers *Never*, *After N payments* (create only; the browser turns N into a date with `src/lib/recurrenceEnd.ts`, using the same month-end rule as the server) or *On a date*. `POST /api/bills` takes `endDate` for recurring bills. `PATCH /api/bills/:id` with `endDate` changes the whole series (`setSeriesEndDate`): it removes **pending** occurrences after the new end date, never paid or earlier ones, and `null` removes the end. The browser already stopped projecting future months after a series' end date.
 
 Edits and deletes take a **scope**: `this` (one occurrence), `future` (this and later unpaid occurrences, and the series), or `all`. Paid occurrences are never deleted by `future`. Installment bills cannot be deleted individually; cancel the plan.
 
@@ -806,6 +814,8 @@ Edits and deletes take a **scope**: `this` (one occurrence), `future` (this and 
 ### 9.4 Reminders
 
 `reminderService` runs when notifications are listed: a bill due within 5 days gets one `due_soon` notification; a past-due unpaid bill gets one `overdue` notification. Uniqueness is per user, bill and type. Notifications are cleared when the bill is paid or deleted. Reminders are in-app only.
+
+Existence is checked with one query per reminder type for all candidate bills (not one per bill), and resolving reminders for paid bills starts from the user's unread notifications rather than loading every paid bill id. This runs on every notifications request, which the bell polls each minute, so its query count must not grow with the number of overdue bills.
 
 ### 9.5 Month scoping and projection (`src/lib/billMonth.ts`)
 
@@ -1278,6 +1288,7 @@ Not configured by the application. Use Atlas backups (a paid-tier feature) or sc
 - **Bundle:** route-level lazy loading keeps the landing page light; the entry bundle is about 561 kB (Vite warns above 500 kB) — candidate for `manualChunks`.
 - **Statelessness:** the API holds no session state, so it can scale horizontally. Two things are per instance today: rate-limit counters (use a shared store such as Redis when running multiple instances) and the in-process Clerk profile sync timing (stored in the database, so it is already shared).
 - **Cold starts:** Render free tier sleeps; the first request after idle can take tens of seconds.
+- **Dashboard load (October 2026).** The dashboard fires several requests at once, and three of them (bills, subscriptions, notifications) first materialise recurring bills and reminders. Those routines used to query MongoDB once per month of every recurring series and once per overdue bill, so a loan that started two years ago cost about 24 sequential queries per request, three times per page load, and again on every notification poll. They now use a small fixed number of queries (`src/test/query-batching.test.ts` pins this). The browser also sends a throwaway `GET /api/ready` as soon as the app opens (`warmUpApi`, production only) so a sleeping API starts waking while the page loads. No before/after timings were measured on the live service; see [PERFORMANCE.md](PERFORMANCE.md) for how to measure and for the keep-alive option.
 - **Growth path:** if bill counts grow large, add month-range query parameters to `GET /api/bills` and keep the same client derivation; add pagination for payments.
 
 ---

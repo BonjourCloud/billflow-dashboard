@@ -38,6 +38,7 @@ import {
   generateDueOccurrencesForUser,
   createRecurringSeriesWithOccurrences,
   updateRecurringBillWithScope,
+  setSeriesEndDate,
   deleteRecurringBillWithScope,
   updateRecurringSeriesDirectly,
   cancelRecurringSeriesDirectly,
@@ -1900,6 +1901,16 @@ app.post(
 // Bill CRUD
 // ──────────────────────────────────────────────
 
+const billEndDateSchema = z
+  .string()
+  .trim()
+  .min(1, "End date is required.")
+  .refine((val) => !Number.isNaN(Date.parse(val)), {
+    message: "Invalid end date. Expected a valid date string.",
+  })
+  .transform((val) => new Date(val))
+  .nullable();
+
 export const billBodySchema = z
   .object({
     name: z.string().trim().min(1, "Bill name is required.").max(100),
@@ -1921,6 +1932,8 @@ export const billBodySchema = z
     isSubscription: z.boolean().optional(),
     recurrenceType: z.enum(["one_time", "recurring"]).optional(),
     recurringDay: z.number().int().min(1).max(31).optional(),
+    // Date of the last payment of a recurring bill (e.g. the 12th EMI of a loan).
+    endDate: billEndDateSchema.optional(),
   })
   .strict()
   .transform((data) => {
@@ -1957,6 +1970,8 @@ export const billUpdateSchema = z
     isSubscription: z.boolean().optional(),
     recurrenceType: z.enum(["one_time", "recurring"]).optional(),
     recurringDay: z.number().int().min(1).max(31).optional(),
+    // Series-level: applies to the whole recurring series; null removes the end.
+    endDate: billEndDateSchema.optional(),
     updateScope: z.enum(["this", "future"]).optional(),
   })
   .strict();
@@ -2036,6 +2051,20 @@ app.post("/api/bills", async (req, res) => {
       return res.status(400).json({ error: categoryProblem });
     }
 
+    if (parsed.data.endDate && parsed.data.recurrenceType !== "recurring") {
+      return res
+        .status(400)
+        .json({ error: "An end date only applies to recurring bills." });
+    }
+    if (
+      parsed.data.endDate &&
+      parsed.data.endDate.getTime() < parsed.data.dueDate.getTime()
+    ) {
+      return res
+        .status(400)
+        .json({ error: "End date cannot be before the first due date." });
+    }
+
     if (parsed.data.recurrenceType === "recurring") {
       const { primaryBill } = await createRecurringSeriesWithOccurrences(
         userId,
@@ -2046,6 +2075,7 @@ app.post("/api/bills", async (req, res) => {
           dueDate: parsed.data.dueDate,
           recurringDay: parsed.data.recurringDay,
           initialStatus: parsed.data.status,
+          endDate: parsed.data.endDate ?? null,
         },
       );
       return res.status(201).json(primaryBill);
@@ -2111,14 +2141,35 @@ app.patch("/api/bills/:id", async (req, res) => {
       return res.status(400).json({ error: patchCategoryProblem });
     }
 
-    const { updateScope = "this", ...updates } = parsed.data;
+    const { updateScope = "this", endDate, ...updates } = parsed.data;
 
-    const bill = await updateRecurringBillWithScope(
-      userId,
-      req.params.id,
-      updates as Partial<BillDocument> & { recurringDay?: number },
-      updateScope,
-    );
+    if (endDate !== undefined) {
+      if (!targetBill.seriesId || targetBill.recurrenceType !== "recurring") {
+        return res
+          .status(400)
+          .json({ error: "An end date only applies to recurring bills." });
+      }
+      if (endDate && endDate.getTime() < targetBill.dueDate.getTime()) {
+        return res.status(400).json({
+          error: "End date cannot be before this bill's due date.",
+        });
+      }
+      const ended = await setSeriesEndDate(userId, targetBill.seriesId, endDate);
+      if (!ended.ok) {
+        return res.status(400).json({ error: ended.error });
+      }
+    }
+
+    // An end-date-only change has nothing to write to the occurrence itself.
+    const bill =
+      Object.keys(updates).length === 0
+        ? await Bill.findOne({ _id: req.params.id, userId }).lean()
+        : await updateRecurringBillWithScope(
+            userId,
+            req.params.id,
+            updates as Partial<BillDocument> & { recurringDay?: number },
+            updateScope,
+          );
 
     if (!bill) {
       return res.status(404).json({ error: "Bill not found." });

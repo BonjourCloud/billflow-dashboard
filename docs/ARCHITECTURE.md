@@ -98,7 +98,7 @@ Middleware runs in this order (`server/src/index.ts`):
 
 There are no cron jobs. Work is done lazily when the user asks for data:
 
-- Listing bills, subscriptions, or notifications first creates any recurring occurrences that are due, up to next month. Months further ahead are projected in the browser (`projectRecurringBills`) and never stored.
+- Listing bills, subscriptions, or notifications first creates any recurring occurrences that are due, up to next month (or up to the series end date, for a loan that ends). It finds the existing ones with a single query per request, not one per month. Months further ahead are projected in the browser (`projectRecurringBills`) and never stored.
 - Listing notifications creates any missing reminders (due within 5 days, or overdue). Reminders are in-app only; no email or push is sent.
 
 ### Consistency guarantees
@@ -120,6 +120,8 @@ The environment is validated when the server module loads (skipped when `NODE_EN
 - **Month scope** (`src/lib/billMonth.ts`, `useBillStore`, `useMonthBills`): the dashboard and the Budget pages work on one selected month. Stats count bills due in that month plus unpaid ones carried over from earlier months, and recurring bills not yet created are projected from their series. Due dates are UTC midnight, so months are matched in UTC; "current month" uses local time.
 - **Budget** (`src/pages/budget/`, `src/lib/cashFlow.ts`, `src/hooks/useBudget.ts`): all figures are computed in the browser. Free to spend = expected income (sources counted in the plan) − bills − money saved (bills in `savings` categories). EMIs are bills with an installment plan or in the Loans category; their share of income is compared with the configured threshold. The Cash Flow card on the dashboard and the Budgets tab share the same month hooks and query keys as the bill list.
 - **Stale deploys** (`src/lib/chunkReload.ts`, `ChunkErrorBoundary`): after a deploy, an open tab can request a lazy chunk that no longer exists. The app reloads once (guarded by `sessionStorage` to avoid loops) on Vite's `vite:preloadError` or a failed dynamic import, and otherwise shows a "reload" screen instead of a blank page.
+- **Installable app and analytics** (`public/sw.js`, `public/manifest.webmanifest`, `src/lib/pwa.ts`, `src/lib/analytics.ts`): the app can be installed on Android; Google Analytics loads only when `VITE_GA_MEASUREMENT_ID` is set. `warmUpApi()` in `src/lib/api.ts` pings `/api/ready` on app start to wake a sleeping API. See [PWA.md](PWA.md), [ANALYTICS.md](ANALYTICS.md), [PERFORMANCE.md](PERFORMANCE.md).
+- **Recurring end date** (`src/lib/recurrenceEnd.ts`, `BillDialog`): the Add/Edit Bill form can end a recurring bill after N payments or on a date.
 - **Insights** (`src/lib/insights.ts`) are computed in the browser from the user's bills, payments, and plans with fixed rules. No AI or LLM service is called.
 
 ## Configuration

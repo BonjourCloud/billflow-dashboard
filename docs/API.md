@@ -46,8 +46,8 @@ Request bodies are validated strictly: unknown fields (including `userId`) are r
 |---|---|---|---|
 | GET | `/api/bills` | user | All bills, by due date. Creates any due recurring occurrences first, up to next month; later months are projected in the browser, not stored. |
 | GET | `/api/bills/:id` | user | |
-| POST | `/api/bills` | user | `{ name, amount, dueDate, status, category, recurrenceType?, recurringDay?, isSubscription? }`. `recurrenceType: "recurring"` also creates a subscription series. `201` |
-| PATCH | `/api/bills/:id` | user | Any of the above plus `updateScope: "this" \| "future"` for recurring bills |
+| POST | `/api/bills` | user | `{ name, amount, dueDate, status, category, recurrenceType?, recurringDay?, isSubscription?, endDate? }`. `recurrenceType: "recurring"` also creates a subscription series. `endDate` is the date of the last payment (inclusive, not before `dueDate`, recurring bills only; e.g. the 12th EMI of a loan); omit it for an ongoing bill. `201` |
+| PATCH | `/api/bills/:id` | user | Any of the above plus `updateScope: "this" \| "future"` for recurring bills. `endDate` changes the whole series (not just this occurrence): a date sets or moves the last payment and removes pending occurrences after it (paid ones stay); `null` removes the end. It cannot be before this bill's due date, and `400` on one-time bills. |
 | DELETE | `/api/bills/:id?scope=this\|future\|all` | user | `204`. Paid occurrences are never deleted by `future`. Installment bills return `400` (cancel the plan instead). |
 
 `status`: `paid`, `pending`, `overdue`. `category`: the `slug` of an active category from `GET /api/categories` (see [Categories](#categories)). A bill, subscription or installment plan keeps its category when edited even if an admin has since hidden it; picking a hidden or unknown category is `400`.

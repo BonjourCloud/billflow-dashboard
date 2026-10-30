@@ -180,20 +180,31 @@ export async function generateRemindersForUser(
 
   let createdCount = 0;
 
+  // One query per reminder type finds the bills that already have a reminder
+  // (active, read or dismissed). This runs on every notifications request, so
+  // a lookup per bill meant a round trip for each overdue bill, every minute.
+  const billsWithReminder = async (
+    type: "due_soon" | "overdue",
+    bills: Array<{ _id: unknown }>,
+  ): Promise<Set<string>> => {
+    if (bills.length === 0) return new Set();
+    const rows = await Notification.find({
+      userId,
+      type,
+      billId: { $in: bills.map((bill) => bill._id) },
+    })
+      .select("billId")
+      .lean();
+    return new Set(rows.map((row) => String(row.billId)));
+  };
+  const dueSoonHaveReminder = await billsWithReminder("due_soon", dueSoonBills);
+  const overdueHaveReminder = await billsWithReminder("overdue", overdueBills);
+
   // Process due_soon reminders
   for (const bill of dueSoonBills) {
     const reminderData = buildDueSoonReminderData(bill, refMidnightUtc);
 
-    // Check if notification already exists (active, read, or dismissed)
-    const existing = await Notification.findOne({
-      userId,
-      billId: bill._id,
-      type: "due_soon",
-    })
-      .select("_id")
-      .lean();
-
-    if (existing) {
+    if (dueSoonHaveReminder.has(String(bill._id))) {
       continue;
     }
 
@@ -219,15 +230,7 @@ export async function generateRemindersForUser(
   for (const bill of overdueBills) {
     const reminderData = buildOverdueReminderData(bill, refMidnightUtc);
 
-    const existing = await Notification.findOne({
-      userId,
-      billId: bill._id,
-      type: "overdue",
-    })
-      .select("_id")
-      .lean();
-
-    if (existing) {
+    if (overdueHaveReminder.has(String(bill._id))) {
       continue;
     }
 
@@ -272,25 +275,34 @@ export async function generateRemindersForUser(
   // 3. Stale Notification Resolution:
   // If any bill has been marked 'paid', mark its open unread notifications as read
   // so the user does not receive outdated warnings.
-  const paidBills = await Bill.find({
-    userId,
-    status: "paid",
-  })
-    .select("_id")
+  // Only unread notifications can need resolving, so start from those (usually
+  // a handful) instead of loading the id of every paid bill the user has ever had.
+  const unreadNotifications = await Notification.find({ userId, isRead: false })
+    .select("billId")
     .lean();
 
-  if (paidBills.length > 0) {
-    const paidIds = paidBills.map((b) => b._id);
-    await Notification.updateMany(
-      {
-        userId,
-        billId: { $in: paidIds },
-        isRead: false,
-      },
-      {
-        $set: { isRead: true },
-      },
-    );
+  if (unreadNotifications.length > 0) {
+    const paidBills = await Bill.find({
+      userId,
+      status: "paid",
+      _id: { $in: unreadNotifications.map((n) => n.billId) },
+    })
+      .select("_id")
+      .lean();
+
+    if (paidBills.length > 0) {
+      const paidIds = paidBills.map((b) => b._id);
+      await Notification.updateMany(
+        {
+          userId,
+          billId: { $in: paidIds },
+          isRead: false,
+        },
+        {
+          $set: { isRead: true },
+        },
+      );
+    }
   }
 
   return { createdCount };

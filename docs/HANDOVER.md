@@ -22,6 +22,10 @@ For Rajiv. This page records the state at Iteration 5 (the verification figures 
 | Stale-deploy handling | A blank page after a release (old tab, new chunks) now triggers one automatic reload, or a reload screen. | `src/lib/chunkReload.ts`, `ChunkErrorBoundary` |
 | Budgeting (Phase 1) | Income sources, a Cash Flow card, per-category monthly limits, an optional needs/wants/savings split, and an EMI-share warning. All configurable per user; category type (Need/Want/Savings) is set by admins. | `IncomeSource`, `Budget`, `BudgetSettings` models; `/api/income`, `/api/budgets`, `/api/budget-settings`; Budget tab |
 | Goals and Log a spend (Phase 2) | A **Goals** tab under Budget: a target amount and date, a monthly set-aside worked out for you, an in-plan switch, and a ledger of money added. The monthly amount is taken out of Free to spend. A floating **Log a spend** button on every signed-in page records an everyday expense as a paid bill. The demo now includes four goals. | `Goal` model, `/api/goals`, `GoalsTab`, `QuickSpend`, `src/lib/goals.ts` |
+| Recurring end date | The Add/Edit Bill form can end a recurring bill after N payments or on a date (a loan with 12 EMIs). Pending payments after the end are removed; paid ones stay. | `endDate` on `/api/bills`, `setSeriesEndDate`, `src/lib/recurrenceEnd.ts`, `BillDialog` |
+| Faster dashboard | Recurring-bill and reminder generation use a fixed small number of queries (was one per month or bill), and the app wakes a sleeping API on start. Not measured on the live service. | `recurrenceService.ts`, `reminderService.ts`, `warmUpApi`, [PERFORMANCE.md](PERFORMANCE.md) |
+| Installable app | Android Chrome can install BillWill (manifest, icons, small service worker, offline screen). | `public/`, `src/lib/pwa.ts`, [PWA.md](PWA.md) |
+| Google Analytics | Opt-in GA4 via `VITE_GA_MEASUREMENT_ID` (Vercel Production only); one custom event, `demo_started`. | `src/lib/analytics.ts`, [ANALYTICS.md](ANALYTICS.md) |
 | Demo account | One-click "Try the demo" signs visitors into a shared Clerk user holding generated sample data (₹1,00,000 income, 20,000 rent, about 63% of income going to bills and savings). Reset by banner button, Admin card, `npm run seed:demo`, and automatically after 24 hours. | `demoService.ts`, `/api/demo/*`, `DemoBanner`, [DEMO.md](DEMO.md) |
 | Docs | API, architecture, design, testing, deployment, mocked-vs-real and this page updated; new [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md). | `docs/` |
 
@@ -116,6 +120,7 @@ Atlas (network access, performance), real Clerk sign-in and token verification, 
 - Seeded pricing tiers keep their original numbers (Pro 9, Enterprise 29), which now display as ₹9 and ₹29. Adjust them in Admin → Pricing if they were meant as dollar prices.
 - Rate limits are counted per server instance.
 - Render's Blueprint uses the free plan, which sleeps when idle.
+- The first request after the free Render API has slept can take tens of seconds (a wake-up ping softens it; an uptime monitor or paid plan removes it). Dashboard speed was improved by batching queries but not benchmarked; run the DevTools check in [PERFORMANCE.md](PERFORMANCE.md) for real numbers.
 - No error tracking, alerting, Content-Security-Policy on the frontend, or Atlas backup configuration yet.
 - The frontend entry bundle is about 561 kB (Vite warns above 500 kB).
 - Remaining `npm audit` advisories need major upgrades (Vitest, Vite, Tailwind 4, React Router 7); they affect dev, test, or build tooling, or React Router features the app does not use.
