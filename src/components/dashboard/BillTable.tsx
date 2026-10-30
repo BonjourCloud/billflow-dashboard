@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X, Repeat } from 'lucide-react';
@@ -22,6 +22,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
+
+/** Rows shown at first, and added by each click on "Show more". */
+export const BILLS_PAGE_SIZE = 25;
 
 interface BillTableProps {
   bills: Bill[];
@@ -50,6 +53,15 @@ export function BillTable({
   const navigate = useNavigate();
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const [deleteScopeChoice, setDeleteScopeChoice] = useState<'this' | 'future'>('this');
+  const [visibleCount, setVisibleCount] = useState(BILLS_PAGE_SIZE);
+
+  // A new search, filter or sort starts again from the first page of rows.
+  useEffect(() => {
+    setVisibleCount(BILLS_PAGE_SIZE);
+  }, [searchQuery, filterStatus, filterCategory, sortBy, sortOrder]);
+
+  const shownBills = bills.slice(0, visibleCount);
+  const hiddenCount = bills.length - shownBills.length;
 
   const toggleSort = (field: 'dueDate' | 'amount') => {
     if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -124,7 +136,7 @@ export function BillTable({
       <div className="overflow-x-auto">
         {isMobile ? (
           <ul className="space-y-2" aria-label="Bills">
-            {bills.map(bill => {
+            {shownBills.map(bill => {
               const billIsRecurring = bill.recurrenceType === 'recurring' || bill.isSubscription;
               return (
                 <li key={bill._id} className="rounded-2xl border border-border/30 bg-secondary/20 p-3.5">
@@ -194,7 +206,7 @@ export function BillTable({
           </thead>
           <tbody>
             <AnimatePresence mode="popLayout">
-              {bills.map(bill => {
+              {shownBills.map(bill => {
                 const billIsRecurring = bill.recurrenceType === 'recurring' || bill.isSubscription;
                 return (
                   <motion.tr
@@ -250,6 +262,23 @@ export function BillTable({
           </tbody>
         </table>
         )}
+        {hiddenCount > 0 && (
+          <div className="flex flex-col items-center gap-2 pt-4">
+            <p className="text-xs text-muted-foreground" data-testid="bills-showing">
+              Showing {shownBills.length} of {bills.length} bills
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="active:scale-95"
+              onClick={() => setVisibleCount((n) => n + BILLS_PAGE_SIZE)}
+            >
+              Show {Math.min(BILLS_PAGE_SIZE, hiddenCount)} more
+            </Button>
+          </div>
+        )}
+
         {bills.length === 0 && (
           <p className="text-center text-muted-foreground text-sm py-12">No bills match your filters.</p>
         )}
