@@ -618,6 +618,10 @@ A tab left open across a release can request a lazy chunk that no longer exists.
 
 **Loans already under way.** A recurring bill whose first due date is in the past normally materializes the earlier months as `overdue`. With `markPastPaid: true` the server (`createRecurringSeriesWithOccurrences`) creates the first bill as `paid` and, after generating the cycles, flips every `overdue` occurrence of that series due before today (UTC) to `paid`. The form shows the option only when adding such a bill and pre-ticks it. No payment records are created: the paid bills count in totals through the legacy-paid rule, and the bill detail page shows no payment history for them. Later months appear automatically as the calendar moves (generation looks one month ahead). The bill dialog is a flex column: fields scroll and the Cancel / Save row stays pinned, so it fits short screens.
 
+**Bill Hub order.** The table defaults to `sortBy: "smart"` (`compareBillsByAttention`): overdue bills oldest first, then pending bills soonest first, then paid bills newest first, ties by name. Choosing Due Date or Amount switches to that column; clicking the Status header returns to the default. The phone card list always uses the default.
+
+**Show more.** `GET /api/bills` still returns every bill; `BillTable` renders the first `BILLS_PAGE_SIZE` (25) rows and adds 25 per "Show more" click, with a "Showing X of Y bills" line. The count resets to 25 whenever the search, filter or sort changes. Limitation: all bills are still fetched on each dashboard load. If that gets slow (thousands of bills), the next step is server-side paging, which would also have to account for the month totals that use the full list.
+
 ## 8. Data design
 
 ### 8.1 Entity relationships

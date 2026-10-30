@@ -6,6 +6,7 @@ import { Bill, BillStatus, BillCategory, STATUSES } from '@/data/bills';
 import { useCategories } from '@/hooks/useCategories';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { RowActions } from '@/components/RowActions';
+import type { BillSortBy } from '@/lib/billSort';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,8 +29,8 @@ interface BillTableProps {
   setFilterStatus: (s: BillStatus | 'all') => void;
   filterCategory: BillCategory | 'all';
   setFilterCategory: (c: BillCategory | 'all') => void;
-  sortBy: 'dueDate' | 'amount';
-  setSortBy: (s: 'dueDate' | 'amount') => void;
+  sortBy: BillSortBy;
+  setSortBy: (s: BillSortBy) => void;
   sortOrder: 'asc' | 'desc';
   setSortOrder: (o: 'asc' | 'desc') => void;
   searchQuery: string;
@@ -178,7 +179,16 @@ export function BillTable({
               <th className="pb-3 cursor-pointer select-none" onClick={() => toggleSort('dueDate')}>
                 <span className="inline-flex items-center gap-1">Due Date <ArrowUpDown className="w-3 h-3" /></span>
               </th>
-              <th className="pb-3">Status</th>
+              <th
+                className="pb-3 cursor-pointer select-none"
+                onClick={() => setSortBy('smart')}
+                title="Needs attention first: overdue, then next due, then paid"
+                aria-sort={sortBy === 'smart' ? 'other' : 'none'}
+              >
+                <span className="inline-flex items-center gap-1">
+                  Status {sortBy === 'smart' ? <span className="normal-case text-primary">· priority</span> : <ArrowUpDown className="w-3 h-3" />}
+                </span>
+              </th>
               <th className="pb-3 pr-4 text-right">Actions</th>
             </tr>
           </thead>

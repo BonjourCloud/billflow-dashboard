@@ -4,6 +4,7 @@ import { Bill, BillStatus, BillCategory } from '@/data/bills';
 import { PaymentRecord } from '@/data/billDetails';
 import type { Subscription } from '@/data/subscriptions';
 import { apiRequest, ApiError } from '@/lib/api';
+import { compareBillsByAttention, type BillSortBy } from '@/lib/billSort';
 import { toast } from 'sonner';
 import {
   MonthKey,
@@ -124,7 +125,7 @@ export function useBillStore() {
 
   const [filterStatus, setFilterStatus] = useState<BillStatus | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<BillCategory | 'all'>('all');
-  const [sortBy, setSortBy] = useState<'dueDate' | 'amount'>('dueDate');
+  const [sortBy, setSortBy] = useState<BillSortBy>('smart');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -218,6 +219,7 @@ export function useBillStore() {
     if (filterCategory !== 'all') result = result.filter(b => b.category === filterCategory);
     if (searchQuery) result = result.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()));
     result.sort((a, b) => {
+      if (sortBy === 'smart') return compareBillsByAttention(a, b);
       const mul = sortOrder === 'asc' ? 1 : -1;
       if (sortBy === 'dueDate') return mul * (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
       return mul * (a.amount - b.amount);

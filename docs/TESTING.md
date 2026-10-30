@@ -60,6 +60,7 @@ They cover:
 - row actions: Edit/Delete/Cancel buttons are always rendered with an accessible name and never hidden behind hover (`row-actions.test.tsx`);
 - duplicate bills: the matching rules (`duplicate-service.test.ts`, models mocked) and the 409 / `allowDuplicate` flow against a real database (`integration/duplicate-bills.test.ts`, needs MongoDB, runs in CI);
 - loans already under way: `earlierPaymentCount` (`recurrenceEnd.test.ts`) and the paid-versus-overdue result against a real database (`integration/recurring-past-paid.test.ts`, runs in CI);
+- Bill Hub default order: overdue, then pending soonest-first, then paid newest-first (`bill-sort.test.ts`);
 - Google Analytics loader (off without an ID, rejects bad IDs, one script, Do Not Track, `analytics.test.ts`) and PWA registration and manifest (`pwa.test.ts`);
 - demo data: the generated dataset is checked on five different dates for the 50%-of-income rule, no past-dated pending bills except the one intentional overdue bill, every app feature being represented, and reset determinism (`demo-data.test.ts`).
 
