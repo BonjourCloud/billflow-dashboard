@@ -104,15 +104,18 @@ test("creates a bill and records a payment", async ({ page }, testInfo) => {
   await dialog.getByRole("button", { name: "Add Bill" }).click();
   await expect(dialog).toBeHidden();
 
-  // Scope to the table: the "bill added" toast also contains the bill name and
-  // disappears, which would leave a click waiting on a detached element.
-  const row = page.getByRole("row").getByText("Broadband", { exact: true });
-  await expect(row).toBeVisible();
+  // Scope to the bills list, not the "bill added" toast (which also contains the
+  // name and then disappears). Desktop renders a <table> row; mobile renders a
+  // <ul aria-label="Bills"> of cards — match the name inside either.
+  const desktopRow = page.getByRole("row").getByText("Broadband", { exact: true });
+  const mobileCard = page.getByRole("list", { name: "Bills" }).getByText("Broadband", { exact: true });
+  const row = desktopRow.or(mobileCard);
+  await expect(row.first()).toBeVisible();
   await expect(page.getByText("₹1,499.00").first()).toBeVisible();
   await expectNoHorizontalOverflow(page, "dashboard with a bill");
   await expectNoDollarSign(page, "dashboard with a bill");
 
-  await row.click();
+  await row.first().click();
   await expect(page).toHaveURL(/\/bill\/[0-9a-f]{24}$/);
   await expectNoHorizontalOverflow(page, "bill detail");
   await expectNoDollarSign(page, "bill detail");
@@ -150,7 +153,7 @@ test("adds and cancels a recurring subscription", async ({ page }, testInfo) => 
   await expectNoHorizontalOverflow(page, "subscriptions");
   await expectNoDollarSign(page, "subscriptions");
 
-  await page.getByTitle("Cancel subscription").first().click();
+  await page.getByRole("button", { name: "Cancel Music Premium" }).first().click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm.getByText("Are you sure you want to cancel Music Premium?")).toBeVisible();
   await confirm.getByRole("button", { name: "Stop Renewals" }).click();
