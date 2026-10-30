@@ -386,6 +386,44 @@ typecheck clean.
 
 ---
 
+## 6g. PWA + duplicate warning + earlier payments (commits `03dc5e0`, `8cee4a1`)
+
+Pushed as two separate commits (revertable independently). Row-actions was a
+no-op here (already in `399ccf4`).
+
+**PWA (`03dc5e0`) — installable app.** `public/manifest.webmanifest`,
+`public/icons/`, `public/sw.js` (service worker), `public/offline.html`,
+`src/lib/pwa.ts` (`registerServiceWorker`, **production-only**), `pwa.test.ts`,
+`docs/PWA.md`. Wired **additively** so nothing regressed:
+- `main.tsx` — `registerServiceWorker()` call added.
+- `index.html` — manifest link + `theme-color` + mobile-web-app metas; favicon
+  (`billwill-logo.png`) and OG/Twitter tags **preserved** (the delivery left
+  these files untouched, so I added the wiring by hand, not via overwrite).
+- `vercel.json` — `/sw.js` and `/manifest.webmanifest` served `max-age=0,
+  must-revalidate` so SW updates propagate; `/assets/*` stays immutable.
+- After deploy on a phone: hard-refresh / reopen the installed app once (the SW
+  can serve old files for one visit).
+
+**Duplicate warning + earlier payments (`8cee4a1`) — backend + app.** New
+`server/src/services/duplicateService.ts` + `DuplicateBillDialog.tsx`: when a new
+bill looks like an existing one, warn before saving. "Earlier payments" allows a
+recurring bill's start/payment to be past-dated. Touches `server/src/index.ts`,
+`recurrenceService.ts`, `recurrenceEnd.ts`, `BillDialog.tsx`, `useBillStore.ts`,
+`api.ts`, `Index.tsx`. Tests: `duplicate-service.test.ts`,
+`integration/duplicate-bills.test.ts`, `integration/recurring-past-paid.test.ts`.
+- **Needs both API (Render) and app (Vercel) deployed** — deploy **Render first**.
+  In the window where the app is ahead: the duplicate warning just won't show,
+  and a ticked "earlier payments" box is rejected with "Invalid bill data" until
+  Render catches up (retry works after).
+
+**Re-fixed regression:** this delivery again reverted the `categories.test.ts`
+installments assertion (`plan.body.category` → must be `plan.body.plan.category`,
+since the POST returns `{ plan, installments }`). Re-applied to both assertions.
+
+Verified (Node 24): typecheck all 4 projects; unit 22/22; integration 17/17.
+
+---
+
 ## 7. Monthly Flow month logic (recent work)
 
 Two frontend-only changes, built around `src/lib/billMonth.ts` (+ `bill-month.test.ts`):
@@ -597,13 +635,24 @@ rather than guessing from the text log.
 - **Row action buttons (edit/delete)**: shared `src/components/RowActions.tsx`
   used across bill + subscription tables and the notification bell. Frontend-only.
   Pushed (`399ccf4`); `row-actions.test.tsx` added.
+- **PWA**: installable app — manifest, service worker, offline page, icons;
+  wired additively without touching favicon/OG. Pushed (`03dc5e0`). (See §6g.)
+- **Duplicate warning + earlier payments**: duplicate-bill guard + past-dated
+  recurring payments; backend + app. Pushed (`8cee4a1`); deploy Render before
+  Vercel. 22 unit + 17 integration tests pass. (See §6g.)
+- **Bill Hub smart sort**: new default "priority" sort (overdue → next due →
+  paid) via `src/lib/billSort.ts` (`compareBillsByAttention`); clickable Status
+  column header. Frontend-only (Vercel only). Pushed (`fa0589a`);
+  `bill-sort.test.ts` added.
+- **Bill Hub "Show more" pagination**: `BillTable.tsx` shows 25 rows
+  (`BILLS_PAGE_SIZE`) and a "Show N more" button; resets to page 1 on any
+  search/filter/sort change. Frontend-only. Pushed (`b087175`).
 
 ### Pending / to consider
-- **PWA feature not yet committed:** service worker, manifest, offline page,
-  icons, `src/lib/pwa.ts` (+ `billwill-pwa.zip`) are untracked in the working
-  tree. When committing, re-apply the `index.html`/`vercel.json` PWA bits
-  WITHOUT reverting the favicon (`billwill-logo.png`) or the OG/Twitter preview
-  tags, and re-add `registerServiceWorker()` to `main.tsx`.
+- **Recurring `categories.test.ts` regression:** incoming deliveries keep
+  reverting the installments assertion to `plan.body.category`; the API returns
+  `{ plan, installments }`, so it must be `plan.body.plan.category`. Re-fixed
+  twice now — watch for it again.
 - **CI/CD gap:** CI (GitHub Actions) and deploys (Vercel/Render) are not linked —
   a red CI run does not block a deploy. For real CI/CD, gate deploys on green
   (Vercel required checks, or a deploy job triggered only after tests pass).
@@ -641,6 +690,11 @@ rather than guessing from the text log.
 ## 13. Recent commit history (deploy repo `personal/main`)
 
 ```
+b087175  feat: Show more pagination for Bill Hub table (25 rows per page)
+fa0589a  feat: Bill Hub smart priority sort (overdue -> next due -> paid)
+8cee4a1  feat: duplicate-bill warning and allow earlier/past-dated recurring payments
+03dc5e0  feat: PWA - installable app with service worker, manifest, and offline page
+5154eeb  docs: add row action buttons fix to notes
 399ccf4  fix: row action buttons (edit, delete) across bill and subscription tables
 446d0bd  docs: add recurring end dates + API perf (6f); note PWA still pending
 6e5482f  feat: recurring bill end dates and API performance (query batching, warm-up)
