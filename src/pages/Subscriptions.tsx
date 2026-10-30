@@ -21,6 +21,8 @@ import { SubscriptionDialog } from '@/components/subscriptions/SubscriptionDialo
 import { Subscription } from '@/data/subscriptions';
 import { BillCategory } from '@/data/bills';
 import { useCategories } from '@/hooks/useCategories';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { RowActions, type RowAction } from '@/components/RowActions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -51,6 +53,23 @@ function getOrdinalSuffix(n: number): string {
 export default function Subscriptions() {
   const { categories, getLabel } = useCategories();
   const store = useSubscriptionStore();
+  const isMobile = useIsMobile();
+
+  const actionsFor = (sub: Subscription): RowAction[] => [
+    { label: `Edit ${sub.name}`, icon: Pencil, onClick: () => handleEdit(sub) },
+    ...(sub.isActive
+      ? [{ label: `Cancel ${sub.name}`, icon: Ban, tone: 'warn' as const, onClick: () => setCancellingSub(sub) }]
+      : []),
+    {
+      label: `Delete ${sub.name}`,
+      icon: Trash2,
+      tone: 'danger' as const,
+      onClick: () => {
+        setDeletingSub(sub);
+        setDeleteScope('future');
+      },
+    },
+  ];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [cancellingSub, setCancellingSub] = useState<Subscription | null>(null);
@@ -296,6 +315,39 @@ export default function Subscriptions() {
 
           {/* Subscriptions Table */}
           <div className="overflow-x-auto">
+            {isMobile ? (
+              <ul className="space-y-2 px-1" aria-label="Subscriptions">
+                {store.subscriptions.map((sub) => (
+                  <li key={sub._id} className="rounded-2xl border border-border/30 bg-secondary/20 p-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm flex items-center gap-2">
+                          <Repeat className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="truncate">{sub.name}</span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {getLabel(sub.category)} · Monthly · Day {sub.recurringDay}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
+                          sub.isActive ? 'badge-paid' : 'badge-overdue'
+                        } capitalize`}
+                      >
+                        {sub.isActive ? 'Active' : 'Ended'}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-end justify-between gap-3">
+                      <p className="font-mono-data text-base font-semibold">
+                        {formatCurrency(sub.amount)}
+                        <span className="text-xs text-muted-foreground font-normal">/mo</span>
+                      </p>
+                      <RowActions actions={actionsFor(sub)} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
@@ -376,40 +428,7 @@ export default function Subscriptions() {
                           </span>
                         </td>
                         <td className="py-3 pr-4">
-                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Edit subscription"
-                              className="h-8 w-8 active:scale-95"
-                              onClick={() => handleEdit(sub)}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
-                            {sub.isActive && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Cancel subscription"
-                                className="h-8 w-8 text-amber-500 hover:text-amber-600 active:scale-95"
-                                onClick={() => setCancellingSub(sub)}
-                              >
-                                <Ban className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Delete subscription"
-                              className="h-8 w-8 text-destructive active:scale-95"
-                              onClick={() => {
-                                setDeletingSub(sub);
-                                setDeleteScope('future');
-                              }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
+                          <RowActions actions={actionsFor(sub)} />
                         </td>
                       </motion.tr>
                     );
@@ -417,6 +436,7 @@ export default function Subscriptions() {
                 </AnimatePresence>
               </tbody>
             </table>
+            )}
 
             {store.subscriptions.length === 0 && (
               <div className="text-center py-16 space-y-3">

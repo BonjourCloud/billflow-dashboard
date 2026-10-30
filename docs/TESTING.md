@@ -57,6 +57,7 @@ They cover:
 - savings goals: months and suggested monthly amount (₹1,35,000 over four months is ₹33,750, rounded up), the browser and server agreeing on that maths, the reserve in a month, pace and goal states, the effect on Free to spend, and request validation (`goals.test.ts`);
 - recurring end date: the Nth payment date and the payment count between two dates, including month-end days and leap years (`recurrenceEnd.test.ts`);
 - query counts: the recurring-bill and reminder generators use a fixed small number of database calls however many months or bills there are (`query-batching.test.ts`, models mocked);
+- row actions: Edit/Delete/Cancel buttons are always rendered with an accessible name and never hidden behind hover (`row-actions.test.tsx`);
 - Google Analytics loader (off without an ID, rejects bad IDs, one script, Do Not Track, `analytics.test.ts`) and PWA registration and manifest (`pwa.test.ts`);
 - demo data: the generated dataset is checked on five different dates for the 50%-of-income rule, no past-dated pending bills except the one intentional overdue bill, every app feature being represented, and reset determinism (`demo-data.test.ts`).
 

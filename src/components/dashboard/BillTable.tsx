@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowUpDown, Filter, Plus, Pencil, Trash2, X, Repeat } from 'lucide-react';
 import { Bill, BillStatus, BillCategory, STATUSES } from '@/data/bills';
 import { useCategories } from '@/hooks/useCategories';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { RowActions } from '@/components/RowActions';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,6 +45,7 @@ export function BillTable({
   onAdd, onEdit, onDelete,
 }: BillTableProps) {
   const { categories, getLabel } = useCategories();
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const [deleteScopeChoice, setDeleteScopeChoice] = useState<'this' | 'future'>('this');
@@ -118,6 +121,52 @@ export function BillTable({
       </div>
 
       <div className="overflow-x-auto">
+        {isMobile ? (
+          <ul className="space-y-2" aria-label="Bills">
+            {bills.map(bill => {
+              const billIsRecurring = bill.recurrenceType === 'recurring' || bill.isSubscription;
+              return (
+                <li key={bill._id} className="rounded-2xl border border-border/30 bg-secondary/20 p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/bill/${bill._id}`)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="font-medium text-sm truncate">{bill.name}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {billIsRecurring ? 'Recurring' : 'One-time'} · {getLabel(bill.category)}
+                      </p>
+                    </button>
+                    {statusBadge(bill.status)}
+                  </div>
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <div>
+                      <p className="font-mono-data text-base font-semibold">{formatCurrency(bill.amount)}</p>
+                      <p className="font-mono-data text-xs text-muted-foreground">
+                        Due {format(new Date(bill.dueDate), 'MMM dd, yyyy')}
+                      </p>
+                    </div>
+                    <RowActions
+                      actions={[
+                        { label: `Edit ${bill.name}`, icon: Pencil, onClick: () => onEdit(bill) },
+                        {
+                          label: `Delete ${bill.name}`,
+                          icon: Trash2,
+                          tone: 'danger',
+                          onClick: () => {
+                            setBillToDelete(bill);
+                            setDeleteScopeChoice('this');
+                          },
+                        },
+                      ]}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
         <table className="w-full">
           <thead>
             <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
@@ -169,22 +218,20 @@ export function BillTable({
                     <td className="py-3 font-mono-data text-sm text-muted-foreground">{format(new Date(bill.dueDate), 'MMM dd, yyyy')}</td>
                     <td className="py-3">{statusBadge(bill.status)}</td>
                     <td className="py-3 pr-4">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 active:scale-95" onClick={() => onEdit(bill)}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive active:scale-95"
-                          onClick={() => {
-                            setBillToDelete(bill);
-                            setDeleteScopeChoice('this');
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
+                      <RowActions
+                        actions={[
+                          { label: `Edit ${bill.name}`, icon: Pencil, onClick: () => onEdit(bill) },
+                          {
+                            label: `Delete ${bill.name}`,
+                            icon: Trash2,
+                            tone: 'danger',
+                            onClick: () => {
+                              setBillToDelete(bill);
+                              setDeleteScopeChoice('this');
+                            },
+                          },
+                        ]}
+                      />
                     </td>
                   </motion.tr>
                 );
@@ -192,6 +239,7 @@ export function BillTable({
             </AnimatePresence>
           </tbody>
         </table>
+        )}
         {bills.length === 0 && (
           <p className="text-center text-muted-foreground text-sm py-12">No bills match your filters.</p>
         )}

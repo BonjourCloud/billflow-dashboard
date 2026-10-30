@@ -612,6 +612,8 @@ A tab left open across a release can request a lazy chunk that no longer exists.
 
 **Google Analytics 4.** `initAnalytics()` (`src/lib/analytics.ts`) loads `gtag.js` only when `VITE_GA_MEASUREMENT_ID` is set at build time (Vercel Production only), skips browsers sending Do Not Track, and validates the ID. Page views on route changes come from GA4 Enhanced measurement; the only custom event is `demo_started`. No amounts, bill names, emails or user IDs are sent. See [ANALYTICS.md](ANALYTICS.md).
 
+**Row actions.** Edit, delete and cancel buttons in the bill table, subscriptions table and notification list are always visible (hover-only controls cannot be found on touch screens). Below 768 px the bill and subscription lists render as cards (`useIsMobile()`, one DOM tree at a time) with 40 px touch targets; each button has an `aria-label` and tooltip. Shared component: `src/components/RowActions.tsx`.
+
 ## 8. Data design
 
 ### 8.1 Entity relationships

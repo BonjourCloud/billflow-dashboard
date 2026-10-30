@@ -171,7 +171,7 @@ export function NotificationBell() {
                     </div>
 
                     {/* Notification Details */}
-                    <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex-1 min-w-0 pr-14">
                       <div className="flex items-center gap-1.5">
                         <p
                           className={`text-xs truncate ${
@@ -200,13 +200,14 @@ export function NotificationBell() {
                     </div>
 
                     {/* Action Controls */}
-                    <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute right-2 top-2 flex items-center gap-0.5">
                       {!item.isRead && (
                         <button
                           type="button"
                           onClick={(e) => handleMarkRead(e, item._id)}
                           title="Mark as read"
-                          className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 active:scale-95 transition-all"
+                          aria-label="Mark as read"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 active:scale-95 transition-all"
                         >
                           <CheckCheck className="w-3.5 h-3.5" />
                         </button>
@@ -215,7 +216,8 @@ export function NotificationBell() {
                         type="button"
                         onClick={(e) => handleDismiss(e, item._id)}
                         title="Dismiss"
-                        className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 active:scale-95 transition-all"
+                        aria-label="Dismiss notification"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 active:scale-95 transition-all"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
